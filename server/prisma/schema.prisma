@@ -1,0 +1,139 @@
+// SHIKUM_API — Prisma schema (SQLite; Postgres-ready).
+// DB columns use clean English names; Hebrew XLSX headers are mapped during ETL,
+// and Hebrew labels are applied only in the UI / Excel exports.
+//
+// To switch to PostgreSQL: change provider to "postgresql" and point DATABASE_URL
+// at your server — the models below are portable as-is.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// פריט קטלוגי (מק"ט) + וריאנט. entityId = ה-Variant ID המספרי.
+model CatalogItem {
+  id                   Int      @id @default(autoincrement())
+  entityId             String   @unique @map("entity_id")
+  catalogNumber        String   @map("catalog_number")
+  description          String?  @map("description")
+  entitlementFrequency String?  @map("entitlement_frequency")
+  quantityPerPeriod    String?  @map("quantity_per_period")
+  maxQuantity          String?  @map("max_quantity")
+  entitledTypeRaw      String?  @map("entitled_type_raw")
+  entitledType         Int      @default(0) @map("entitled_type")
+  amountTypeRaw        String?  @map("amount_type_raw")
+  amountType           Int      @default(0) @map("amount_type")
+  baseLevel            Int      @default(0) @map("base_level")
+  exceptionLevel       Int      @default(0) @map("exception_level")
+  exceptionPercent     String?  @map("exception_percent")
+  amount               String?  @map("amount")
+  isDeleted            Boolean  @default(false) @map("is_deleted")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([catalogNumber])
+  @@index([description])
+  @@index([isDeleted])
+  @@map("catalog_items")
+}
+
+/// ספק בעל הסכם. modSupplierId (מספר ספק משהב"ט) = מפתח החיבור להסכמים.
+model Supplier {
+  id                  Int      @id @default(autoincrement())
+  modSupplierId       String   @unique @map("mod_supplier_id")
+  rehabSupplierId     String?  @map("rehab_supplier_id")
+  name                String?  @map("name")
+  city                String?  @map("city")
+  street              String?  @map("street")
+  mobile              String?  @map("mobile")
+  workPhone           String?  @map("work_phone")
+  landline            String?  @map("landline")
+  email               String?  @map("email")
+  profession          String?  @map("profession")
+  specialization      String?  @map("specialization")
+  subSpecialization   String?  @map("sub_specialization")
+  therapeuticApproach String?  @map("therapeutic_approach")
+  validFrom           String?  @map("valid_from")
+  validTo             String?  @map("valid_to")
+  district            String?  @map("district")
+  isDeleted           Boolean  @default(false) @map("is_deleted")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([city])
+  @@index([isDeleted])
+  @@map("suppliers")
+}
+
+/// הסכם מחיר: קושר ספק (משהב"ט) למק"ט. מפתח = modSupplierId + catalogNumber.
+model Agreement {
+  id              Int      @id @default(autoincrement())
+  modSupplierId   String   @map("mod_supplier_id")
+  rehabSupplierId String?  @map("rehab_supplier_id")
+  catalogNumber   String   @map("catalog_number")
+  isActive        Boolean  @default(true) @map("is_active")
+  suppliersPerMakt String? @map("suppliers_per_makt")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([modSupplierId, catalogNumber], name: "supplier_makt")
+  @@index([catalogNumber])
+  @@index([modSupplierId])
+  @@map("agreements")
+}
+
+/// מילון קונפיגורציה: מחרוזת -> ערך מספרי (ניתן לעריכה). למשל סוג זכאי 'נכים' -> 1.
+model ConfigMap {
+  id        Int    @id @default(autoincrement())
+  field     String @map("field")
+  textValue String @map("text_value")
+  intValue  Int    @map("int_value")
+
+  @@unique([field, textValue], name: "field_text")
+  @@index([field])
+  @@map("config_map")
+}
+
+/// הרצת סנכרון (Delta) — סיכום של הוספות/עדכונים/מחיקות.
+model SyncRun {
+  id             Int      @id @default(autoincrement())
+  fileType       String   @map("file_type") // items | suppliers | agreements
+  filename       String?  @map("filename")
+  startedAt      DateTime @default(now()) @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  status         String   @default("running") @map("status") // running|completed|failed
+  addedCount     Int      @default(0) @map("added_count")
+  updatedCount   Int      @default(0) @map("updated_count")
+  deletedCount   Int      @default(0) @map("deleted_count")
+  unchangedCount Int      @default(0) @map("unchanged_count")
+  errorMessage   String?  @map("error_message")
+
+  history ItemHistory[]
+
+  @@map("sync_runs")
+}
+
+/// היסטוריית שינויים לרשומה (לפי שדה). action: created|updated|deleted|restored.
+model ItemHistory {
+  id        Int      @id @default(autoincrement())
+  entityKey String   @map("entity_key") // entityId / modSupplierId / composite key
+  fileType  String   @map("file_type")
+  syncRunId Int?     @map("sync_run_id")
+  action    String   @map("action")
+  fieldName String?  @map("field_name")
+  oldValue  String?  @map("old_value")
+  newValue  String?  @map("new_value")
+  changedAt DateTime @default(now()) @map("changed_at")
+
+  syncRun SyncRun? @relation(fields: [syncRunId], references: [id])
+
+  @@index([entityKey])
+  @@index([syncRunId])
+  @@map("item_history")
+}

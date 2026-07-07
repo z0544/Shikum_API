@@ -1,0 +1,23 @@
+{
+  "name": "shikum-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SHIKUM_API — מערכת שליפת מק\"טים, וריאנטים וספקים מורשים (Node.js + React). שכתוב מלא של kms-api.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "db:setup": "npm --prefix server run db:setup",
+    "etl": "npm --prefix server run etl",
+    "dev:server": "npm --prefix server run start:dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "start": "npm --prefix server run start:prod",
+    "test": "npm --prefix server test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
