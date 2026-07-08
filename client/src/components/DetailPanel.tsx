@@ -41,6 +41,7 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
+  const [supplierFilter, setSupplierFilter] = useState('');
 
   function toggleSupplier(id: string) {
     setExpandedSuppliers((prev) => {
@@ -59,6 +60,7 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
     setLoading(true);
     setShowHistory(false);
     setExpandedSuppliers(new Set());
+    setSupplierFilter('');
     api
       .getItem(entityId)
       .then((d) => alive && setItem(d))
@@ -82,6 +84,27 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
   if (!item) return null;
 
   const suppliers = item.authorized_suppliers || [];
+  const filterQuery = supplierFilter.trim().toLowerCase();
+  const filteredSuppliers = filterQuery
+    ? suppliers.filter((s) =>
+        [
+          s.name,
+          s.city,
+          s.district,
+          s.profession,
+          s.specialization,
+          s.subSpecialization,
+          s.therapeuticApproach,
+          s.email,
+          s.street,
+          s.modSupplierId,
+          s.rehabSupplierId,
+          s.mobile,
+          s.workPhone,
+          s.landline,
+        ].some((v) => v && String(v).toLowerCase().includes(filterQuery)),
+      )
+    : suppliers;
 
   return (
     <>
@@ -145,25 +168,38 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
       <section className="card">
         <div className="panel-head">
           <h2>ספקים מורשים</h2>
-          <span className="count-pill">{suppliers.length}</span>
+          <span className="count-pill">
+            {filterQuery ? `${filteredSuppliers.length} / ${suppliers.length}` : suppliers.length}
+          </span>
         </div>
         {suppliers.length === 0 ? (
           <p className="empty-state">אין ספקים מורשים למק"ט זה</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>שם ספק</th>
-                  <th>יישוב</th>
-                  <th>מחוז</th>
-                  <th>טלפון</th>
-                  <th>מקצוע</th>
-                  <th aria-label="פרטים" style={{ width: 32 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {suppliers.map((s) => {
+          <>
+            <input
+              className="sup-filter"
+              type="search"
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              placeholder="סינון ספקים — שם, יישוב, מחוז, מקצוע, התמחות…"
+            />
+            {filteredSuppliers.length === 0 ? (
+              <p className="empty-state">לא נמצאו ספקים התואמים לסינון</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>שם ספק</th>
+                      <th>יישוב</th>
+                      <th>מחוז</th>
+                      <th>טלפון</th>
+                      <th>מקצוע</th>
+                      <th aria-label="פרטים" style={{ width: 32 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSuppliers.map((s) => {
                   const open = expandedSuppliers.has(s.modSupplierId);
                   const details = SUPPLIER_DETAIL.filter(([k]) => {
                     const v = s[k];
@@ -203,10 +239,12 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
                       )}
                     </Fragment>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
     </>

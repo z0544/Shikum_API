@@ -282,6 +282,9 @@ input:focus, select:focus, textarea:focus {
 }
 .variant-open:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
 
+/* סינון ספקים */
+.sup-filter { width: 100%; margin-bottom: 12px; }
+
 /* שורת ספק ניתנת להרחבה */
 .sup-row { cursor: pointer; }
 .sup-row:hover td { background: #eef4ff; }
