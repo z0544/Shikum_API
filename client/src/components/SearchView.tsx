@@ -22,7 +22,7 @@ const FIELD_OPTS = [
 ];
 
 export function SearchView() {
-  const { showToast } = useApp();
+  const { showToast, openVariant } = useApp();
   const [q, setQ] = useState('');
   const [match, setMatch] = useState('contains');
   const [field, setField] = useState('all');
@@ -147,6 +147,16 @@ export function SearchView() {
                       {v.amount && v.amount !== 'לא מוגדר' && (
                         <span className="chip green">₪ {v.amount}</span>
                       )}
+                      <button
+                        className="variant-open"
+                        title="פתח בעמוד וריאנט ייעודי (ניתן לשיתוף)"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openVariant(v.entityId);
+                        }}
+                      >
+                        ↗ פתח בעמוד
+                      </button>
                     </div>
                   ))}
               </div>

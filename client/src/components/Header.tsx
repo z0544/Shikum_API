@@ -13,6 +13,9 @@ export function Header() {
           <button className={view === 'search' ? 'active' : ''} onClick={() => setView('search')}>
             חיפוש מק"טים
           </button>
+          <button className={view === 'variant' ? 'active' : ''} onClick={() => setView('variant')}>
+            תצוגת וריאנט
+          </button>
           <button className={view === 'admin' ? 'active' : ''} onClick={() => setView('admin')}>
             ניהול וטעינת נתונים
           </button>

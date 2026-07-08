@@ -49,6 +49,10 @@ export interface Supplier {
   email: string | null;
   profession: string | null;
   specialization: string | null;
+  subSpecialization: string | null;
+  therapeuticApproach: string | null;
+  validFrom: string | null;
+  validTo: string | null;
   district: string | null;
   isActiveAgreement?: boolean;
   distance_km?: number | null;

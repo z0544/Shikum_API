@@ -1,7 +1,23 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import type { ItemDetail } from '../api/types';
+import type { ItemDetail, Supplier } from '../api/types';
 import { useApp } from '../state/AppContext';
+
+/** שדות ספק נוספים שנחשפים בהרחבת שורת הספק (כולם כבר מגיעים מה-API). */
+const SUPPLIER_DETAIL: [keyof Supplier, string][] = [
+  ['modSupplierId', 'מספר ספק משהב"ט'],
+  ['rehabSupplierId', 'מספר ספק שיקום'],
+  ['mobile', 'נייד'],
+  ['workPhone', 'טלפון עבודה'],
+  ['landline', 'נייח'],
+  ['email', 'דוא"ל'],
+  ['street', 'רחוב ומספר בית'],
+  ['specialization', 'התמחות'],
+  ['subSpecialization', 'תת התמחות'],
+  ['therapeuticApproach', 'גישה טיפולית'],
+  ['validFrom', 'תחילת תוקף'],
+  ['validTo', 'סיום תוקף'],
+];
 
 const FIELD_LABELS: [keyof ItemDetail, string][] = [
   ['catalogNumber', 'מק"ט'],
@@ -24,6 +40,15 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
+
+  function toggleSupplier(id: string) {
+    setExpandedSuppliers((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!entityId) {
@@ -33,6 +58,7 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
     let alive = true;
     setLoading(true);
     setShowHistory(false);
+    setExpandedSuppliers(new Set());
     api
       .getItem(entityId)
       .then((d) => alive && setItem(d))
@@ -133,18 +159,51 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
                   <th>מחוז</th>
                   <th>טלפון</th>
                   <th>מקצוע</th>
+                  <th aria-label="פרטים" style={{ width: 32 }} />
                 </tr>
               </thead>
               <tbody>
-                {suppliers.map((s) => (
-                  <tr key={s.modSupplierId}>
-                    <td>{s.name || '—'}</td>
-                    <td>{s.city || '—'}</td>
-                    <td>{s.district || '—'}</td>
-                    <td>{phone(s)}</td>
-                    <td>{s.profession || '—'}</td>
-                  </tr>
-                ))}
+                {suppliers.map((s) => {
+                  const open = expandedSuppliers.has(s.modSupplierId);
+                  const details = SUPPLIER_DETAIL.filter(([k]) => {
+                    const v = s[k];
+                    return v !== null && v !== undefined && v !== '';
+                  });
+                  return (
+                    <Fragment key={s.modSupplierId}>
+                      <tr
+                        className="sup-row"
+                        onClick={() => details.length && toggleSupplier(s.modSupplierId)}
+                      >
+                        <td>{s.name || '—'}</td>
+                        <td>{s.city || '—'}</td>
+                        <td>{s.district || '—'}</td>
+                        <td>{phone(s)}</td>
+                        <td>{s.profession || '—'}</td>
+                        <td className="sup-caret">{details.length ? (open ? '▲' : '▼') : ''}</td>
+                      </tr>
+                      {open && (
+                        <tr className="sup-detail-row">
+                          <td colSpan={6}>
+                            <div className="detail-grid">
+                              {details.map(([k, label]) => {
+                                const v = String(s[k]);
+                                return (
+                                  <div className="detail-cell" key={String(k)}>
+                                    <div className="k">{label}</div>
+                                    <div className="v">
+                                      {k === 'email' ? <a href={`mailto:${v}`}>{v}</a> : v}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

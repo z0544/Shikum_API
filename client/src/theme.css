@@ -270,6 +270,24 @@ input:focus, select:focus, textarea:focus {
 .variant-row:hover { background: #dfeafc; }
 .variant-row .vid { font-family: monospace; color: var(--brand-dark); font-weight: 700; }
 .variant-row .spacer { flex: 1; }
+.variant-open {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--brand-dark);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.variant-open:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/* שורת ספק ניתנת להרחבה */
+.sup-row { cursor: pointer; }
+.sup-row:hover td { background: #eef4ff; }
+.sup-caret { text-align: center; color: var(--muted); font-size: 11px; }
+.sup-detail-row > td { background: var(--table-zone); padding: 12px 16px; }
+.sup-detail-row .detail-grid { margin: 0; }
 
 /* ===== Tables ===== */
 .table-wrap { width: 100%; overflow-x: auto; }

@@ -11,6 +11,7 @@
     "install:all": "npm install && npm --prefix server install && npm --prefix client install",
     "db:setup": "npm --prefix server run db:setup",
     "etl": "npm --prefix server run etl",
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "npm --prefix server run start:dev",
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix server run build && npm --prefix client run build",
@@ -19,5 +20,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
   }
 }
