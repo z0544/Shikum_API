@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { api, ApiError } from '../api/client';
-import type { SearchResponse } from '../api/types';
+import type { SearchResponse, Supplier } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { Breadcrumbs } from './Header';
 import { SmartSearch } from './SmartSearch';
 import { DetailPanel } from './DetailPanel';
+import { SuppliersPanel } from './SuppliersPanel';
 
 const MATCH_OPTS = [
   ['contains', 'מכיל'],
@@ -16,6 +17,7 @@ const FIELD_OPTS = [
   ['all', 'הכל'],
   ['מקט', 'מק"ט'],
   ['תיאור', 'תיאור'],
+  ['מחירון', 'קוד שירות'],
   ['זכאי', 'סוג זכאי'],
   ['ספק', 'שם ספק'],
   ['entity_id', 'מזהה וריאנט'],
@@ -30,6 +32,9 @@ export function SearchView() {
   const [res, setRes] = useState<SearchResponse | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  const [openSuppliers, setOpenSuppliers] = useState<Set<string>>(new Set());
+  const [maktSuppliers, setMaktSuppliers] = useState<Record<string, Supplier[]>>({});
+  const [loadingSuppliers, setLoadingSuppliers] = useState<Set<string>>(new Set());
 
   async function search() {
     if (!q.trim()) {
@@ -38,6 +43,8 @@ export function SearchView() {
     }
     setLoading(true);
     setSelected(null);
+    setOpenSuppliers(new Set());
+    setMaktSuppliers({});
     try {
       const data = await api.searchItems({ q: q.trim(), match, field });
       setRes(data);
@@ -57,6 +64,36 @@ export function SearchView() {
       next.has(makt) ? next.delete(makt) : next.add(makt);
       return next;
     });
+  }
+
+  async function toggleSuppliers(makt: string) {
+    const wasOpen = openSuppliers.has(makt);
+    setOpenSuppliers((prev) => {
+      const next = new Set(prev);
+      next.has(makt) ? next.delete(makt) : next.add(makt);
+      return next;
+    });
+    // טעינה עצלה של הספקים למק"ט (פעם אחת) בעת פתיחה.
+    if (!wasOpen && !maktSuppliers[makt]) {
+      setLoadingSuppliers((prev) => new Set(prev).add(makt));
+      try {
+        const data = await api.getMaktSuppliers(makt);
+        setMaktSuppliers((prev) => ({ ...prev, [makt]: data.suppliers }));
+      } catch (e) {
+        showToast(e instanceof ApiError ? e.message : 'שגיאה בטעינת ספקים', 'error');
+        setOpenSuppliers((prev) => {
+          const next = new Set(prev);
+          next.delete(makt);
+          return next;
+        });
+      } finally {
+        setLoadingSuppliers((prev) => {
+          const next = new Set(prev);
+          next.delete(makt);
+          return next;
+        });
+      }
+    }
   }
 
   const groups = res?.groups || [];
@@ -126,39 +163,69 @@ export function SearchView() {
                   <span className="makt-badge">{g.catalogNumber}</span>
                   <span className="group-title">{g.description || '—'}</span>
                   <div className="group-meta">
+                    {g.variants[0]?.catalogPricelistNum && (
+                      <span className="chip amber">קוד שירות: {g.variants[0].catalogPricelistNum}</span>
+                    )}
                     <span className="chip">{g.variant_count} וריאנטים</span>
                     <span className="chip green">{g.supplier_count} ספקים</span>
                     <span className="chip">{expanded.has(g.catalogNumber) ? '▲' : '▼'}</span>
                   </div>
                 </div>
-                {expanded.has(g.catalogNumber) &&
-                  g.variants.map((v) => (
-                    <div
-                      className="variant-row"
-                      key={v.entityId}
-                      onClick={() => setSelected(v.entityId)}
-                      style={v.entityId === selected ? { background: '#cfe0fb' } : undefined}
-                    >
-                      <span className="vid">{v.entityId}</span>
-                      <span className="spacer" />
-                      {v.entitledTypeRaw && v.entitledTypeRaw !== 'לא מוגדר' && (
-                        <span className="chip">{v.entitledTypeRaw}</span>
-                      )}
-                      {v.amount && v.amount !== 'לא מוגדר' && (
-                        <span className="chip green">₪ {v.amount}</span>
-                      )}
-                      <button
-                        className="variant-open"
-                        title="פתח בעמוד וריאנט ייעודי (ניתן לשיתוף)"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openVariant(v.entityId);
-                        }}
+                {expanded.has(g.catalogNumber) && (
+                  <>
+                    {g.variants.map((v) => (
+                      <div
+                        className="variant-row"
+                        key={v.entityId}
+                        onClick={() => setSelected(v.entityId)}
+                        style={v.entityId === selected ? { background: '#cfe0fb' } : undefined}
                       >
-                        ↗ פתח בעמוד
-                      </button>
-                    </div>
-                  ))}
+                        <span className="vid">{v.entityId}</span>
+                        <span className="spacer" />
+                        {v.entitledTypeRaw && v.entitledTypeRaw !== 'לא מוגדר' && (
+                          <span className="chip">{v.entitledTypeRaw}</span>
+                        )}
+                        {v.amount && v.amount !== 'לא מוגדר' && (
+                          <span className="chip green">₪ {v.amount}</span>
+                        )}
+                        <button
+                          className="variant-open"
+                          title="פתח בעמוד וריאנט ייעודי (ניתן לשיתוף)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openVariant(v.entityId);
+                          }}
+                        >
+                          ↗ פתח בעמוד
+                        </button>
+                      </div>
+                    ))}
+                    {g.supplier_count > 0 && (
+                      <div className="variant-row" style={{ cursor: 'default' }}>
+                        <button
+                          className="variant-open"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSuppliers(g.catalogNumber);
+                          }}
+                        >
+                          {openSuppliers.has(g.catalogNumber)
+                            ? '▲ הסתר ספקים'
+                            : `▼ הצג ספקים מורשים (${g.supplier_count})`}
+                        </button>
+                        {loadingSuppliers.has(g.catalogNumber) && <span className="spinner" />}
+                      </div>
+                    )}
+                    {openSuppliers.has(g.catalogNumber) && maktSuppliers[g.catalogNumber] && (
+                      <div className="smart-suppliers">
+                        <SuppliersPanel
+                          key={g.catalogNumber}
+                          suppliers={maktSuppliers[g.catalogNumber]}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ))}
           </section>

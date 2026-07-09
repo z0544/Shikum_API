@@ -15,6 +15,7 @@ export interface Variant {
   exceptionLevel: number;
   exceptionPercent: string | null;
   amount: string | null;
+  catalogPricelistNum: string | null;
   history_count?: number;
   supplier_count?: number;
 }
@@ -95,6 +96,23 @@ export interface AiSearchResponse {
   user_location?: string | null;
   results: AiResult[];
   message: string | null;
+}
+
+export interface ChatContext {
+  makat?: string | null;
+  product?: string | null;
+  awaitingLocation?: boolean;
+  location?: string | null;
+}
+
+export interface ChatResponse {
+  intent: 'search' | 'suppliers' | 'contact';
+  reply: string;
+  results?: AiResult[];
+  suppliers?: Supplier[];
+  quickReplies?: string[];
+  followup?: 'location' | null;
+  context: ChatContext;
 }
 
 export interface SyncSummary {

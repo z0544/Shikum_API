@@ -31,6 +31,7 @@ model CatalogItem {
   exceptionLevel       Int      @default(0) @map("exception_level")
   exceptionPercent     String?  @map("exception_percent")
   amount               String?  @map("amount")
+  catalogPricelistNum  String?  @map("catalog_pricelist_num")
   isDeleted            Boolean  @default(false) @map("is_deleted")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")

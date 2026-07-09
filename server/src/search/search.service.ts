@@ -3,6 +3,8 @@ import { CatalogItem } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeoService } from '../geo/geo.service';
 import { CatalogService } from '../catalog/catalog.service';
+import { editDistance, fuzzyThreshold, normalizeHebrew } from '../common/hebrew';
+import { synonymsFor } from './synonyms';
 
 // מילות עזר בעברית — לא משמשות לחיפוש
 const STOPWORDS = new Set(
@@ -15,8 +17,6 @@ const STOPWORDS = new Set(
     .filter(Boolean),
 );
 
-const HE_PREFIXES = ['ול', 'ל', 'ב', 'מ', 'ה', 'ו', 'כ', 'ש'];
-
 export interface ParsedQuery {
   product_terms: string[];
   search_phrase: string;
@@ -25,6 +25,27 @@ export interface ParsedQuery {
   explanation: string;
   parser: string;
 }
+
+/** זיכרון שיחה קצר (נשמר בצד הלקוח ומועבר הלוך-ושוב). */
+export interface ChatContext {
+  makat?: string | null;
+  product?: string | null;
+  awaitingLocation?: boolean;
+  location?: string | null;
+}
+
+export interface ChatResponse {
+  intent: 'search' | 'suppliers' | 'contact';
+  reply: string;
+  results?: Record<string, unknown>[];
+  suppliers?: Record<string, unknown>[];
+  quickReplies?: string[];
+  followup?: 'location' | null;
+  context: ChatContext;
+}
+
+/** קטגוריות ברירת מחדל להכוונה (רשת ביטחון + כפתורי פתיחה). */
+const SUGGESTED_CATEGORIES = ['כיסא גלגלים', 'טיפול פסיכולוגי', 'מכשיר שמיעה', 'עדשות'];
 
 @Injectable()
 export class SearchService {
@@ -36,29 +57,13 @@ export class SearchService {
     private readonly catalog: CatalogService,
   ) {}
 
-  private stripHebrewPrefix(word: string): string {
-    let w = word.trim();
-    for (let iter = 0; iter < 2; iter++) {
-      let changed = false;
-      for (const p of HE_PREFIXES) {
-        if (w.startsWith(p) && w.length > p.length + 1) {
-          w = w.slice(p.length);
-          changed = true;
-          break;
-        }
-      }
-      if (!changed) break;
-    }
-    return w;
-  }
-
   private tokenize(text: string): string[] {
     const words = text.match(/[א-ת0-9][א-ת0-9\-]{1,}/g) || [];
     const tokens: string[] = [];
     for (const w of words) {
       if (STOPWORDS.has(w) || w.length < 2) continue;
-      const root = this.stripHebrewPrefix(w);
-      if (root && !STOPWORDS.has(root) && root.length >= 2) tokens.push(root);
+      // שומרים את המילה המקורית (למשל "כיסא") — הסרת התחילית משמשת רק להרחבת התאמה
+      tokens.push(w);
     }
     return tokens;
   }
@@ -125,21 +130,78 @@ export class SearchService {
   }
 
   private itemRelevanceScore(desc: string, terms: string[], phrase: string): number {
-    const d = desc.toLowerCase();
+    const d = normalizeHebrew(desc);
     let score = 0;
-    if (phrase && phrase.length >= 3 && d.includes(phrase.toLowerCase())) score += 12;
-    if (!terms.length) return score;
-    let matched = 0;
+    const np = normalizeHebrew(phrase);
+    if (np && np.length >= 3 && d.includes(np)) score += 12;
     for (const t of terms) {
-      const tl = t.toLowerCase();
-      if (d.includes(tl)) {
-        matched += 1;
-        score += tl.length >= 5 ? 4 : tl.length >= 4 ? 3 : 2;
+      const nt = normalizeHebrew(t);
+      if (nt.length >= 2 && d.includes(nt)) {
+        score += nt.length >= 5 ? 4 : nt.length >= 4 ? 3 : 2;
       }
     }
-    if (matched === terms.length) score += 6;
-    else if (matched && matched >= Math.max(1, Math.floor(terms.length / 2))) score += 3;
     return score;
+  }
+
+  /** אוצר מילים מנורמל של הקטלוג (מילה מנורמלת -> צורות גולמיות). נבנה פעם אחת. */
+  private vocab: Map<string, string[]> | null = null;
+
+  private async getVocab(): Promise<Map<string, string[]>> {
+    if (this.vocab) return this.vocab;
+    const rows = await this.prisma.catalogItem.findMany({
+      where: { isDeleted: false },
+      select: { description: true },
+    });
+    const norm = new Map<string, string[]>();
+    for (const r of rows) {
+      const words = (r.description || '').match(/[א-ת]{2,}/g) || [];
+      for (const w of words) {
+        const nw = normalizeHebrew(w);
+        if (nw.length < 2) continue;
+        let arr = norm.get(nw);
+        if (!arr) {
+          arr = [];
+          norm.set(nw, arr);
+        }
+        if (!arr.includes(w)) arr.push(w);
+      }
+    }
+    this.vocab = norm;
+    this.logger.log(`אוצר מילים נבנה: ${norm.size} מילים ייחודיות`);
+    return norm;
+  }
+
+  /** מבטל את מטמון אוצר המילים (למשל אחרי טעינת נתונים). */
+  invalidateVocab(): void {
+    this.vocab = null;
+  }
+
+  /** הרחבת מונחים: מקור + נרדפות + התאמה סלחנית (fuzzy) מול אוצר המילים. */
+  private async expandTerms(terms: string[], phrase: string): Promise<string[]> {
+    const out = new Set<string>();
+    for (const t of terms) if (t) out.add(t);
+    for (const s of synonymsFor(phrase)) out.add(s);
+    for (const t of terms) for (const s of synonymsFor(t)) out.add(s);
+
+    const vocab = await this.getVocab();
+    for (const t of terms) {
+      const nt = normalizeHebrew(t);
+      if (nt.length < 2) continue;
+      if (vocab.has(nt)) {
+        for (const raw of vocab.get(nt)!) out.add(raw);
+        continue;
+      }
+      const th = fuzzyThreshold(nt);
+      const cand: { w: string; d: number }[] = [];
+      for (const nw of vocab.keys()) {
+        if (Math.abs(nw.length - nt.length) > th) continue;
+        const d = editDistance(nw, nt);
+        if (d <= th) cand.push({ w: nw, d });
+      }
+      cand.sort((a, b) => a.d - b.d);
+      for (const c of cand.slice(0, 4)) for (const raw of vocab.get(c.w)!) out.add(raw);
+    }
+    return [...out];
   }
 
   private minRelevanceScore(terms: string[], phrase: string): number {
@@ -152,12 +214,13 @@ export class SearchService {
   private async searchItemsSmart(
     terms: string[],
     phrase: string,
+    minScore: number,
     limit = 80,
   ): Promise<CatalogItem[]> {
     if (!terms.length && !phrase) return [];
     const clauses: { description: { contains: string } }[] = [];
     if (phrase && phrase.length >= 3) clauses.push({ description: { contains: phrase } });
-    for (const t of terms) clauses.push({ description: { contains: t } });
+    for (const t of terms) if (t && t.length >= 2) clauses.push({ description: { contains: t } });
     if (!clauses.length) return [];
 
     const rows = await this.prisma.catalogItem.findMany({
@@ -165,12 +228,37 @@ export class SearchService {
       take: limit * 5,
     });
 
-    const minScore = this.minRelevanceScore(terms, phrase);
     const scored = rows
       .map((item) => ({ score: this.itemRelevanceScore(item.description ?? '', terms, phrase), item }))
       .filter((s) => s.score >= minScore)
       .sort((a, b) => b.score - a.score || String(a.item.catalogNumber).localeCompare(String(b.item.catalogNumber)));
     return scored.slice(0, limit).map((s) => s.item);
+  }
+
+  /**
+   * חיפוש ישיר לפי מזהה: קוד שירות משרד הבריאות (catalogPricelistNum) או מק"ט.
+   * מטפל גם בקודים עם אותיות לטיניות (למשל T7825, BZ150) שהטוקנייזר מסנן.
+   */
+  private async searchByCode(query: string): Promise<CatalogItem[]> {
+    const raw = (query || '').trim();
+    if (!raw) return [];
+    const toks = raw
+      .split(/\s+/)
+      .map((t) => t.replace(/[^0-9A-Za-zא-ת\-]/g, ''))
+      .filter((t) => t.length >= 2);
+    if (!toks.length) return [];
+    const codeVariants = new Set<string>();
+    for (const t of toks) {
+      codeVariants.add(t);
+      codeVariants.add(t.toUpperCase());
+    }
+    return this.prisma.catalogItem.findMany({
+      where: {
+        isDeleted: false,
+        OR: [{ catalogPricelistNum: { in: [...codeVariants] } }, { catalogNumber: { in: toks } }],
+      },
+      take: 200,
+    });
   }
 
   /** חיפוש חכם מלא: מחלץ מילים+מיקום, מדרג מק"טים וספקים לפי קרבה. */
@@ -184,19 +272,47 @@ export class SearchService {
       `ai_search: phrase=${phrase.slice(0, 40)} terms=${terms.slice(0, 5)} city=${parsed.location_normalized}`,
     );
 
-    if (!terms.length && !phrase) {
+    // חיפוש ישיר לפי קוד שירות / מק"ט — בעדיפות עליונה
+    const codeItems = await this.searchByCode(query);
+
+    if (!terms.length && !phrase && !codeItems.length) {
       return this.emptyResult(query, parsed, 'לא זוהו מילות חיפוש. נסה לתאר את המוצר או השירות.');
     }
 
-    const items = await this.searchItemsSmart(terms, phrase, itemLimit);
+    // אם השאילתה היא בעצם רק קוד (אין מילת טקסט עברית) — לא מחפשים בתיאורים כדי למנוע רעש
+    const hasTextTerms = terms.some((t) => /[א-ת]{2,}/.test(t));
+    const runSmart = hasTextTerms || !codeItems.length;
+    // הרחבה סלחנית + נרדפות
+    let matchTerms = terms;
+    let smartItems: CatalogItem[] = [];
+    if (runSmart && (terms.length || phrase)) {
+      matchTerms = await this.expandTerms(terms, phrase);
+      const minScore = this.minRelevanceScore(terms, phrase);
+      smartItems = await this.searchItemsSmart(matchTerms, phrase, minScore, itemLimit);
+    }
+
+    // מיזוג — התאמות קוד תחילה, ללא כפילויות
+    const seen = new Set<string>();
+    const items: CatalogItem[] = [];
+    for (const it of [...codeItems, ...smartItems]) {
+      if (!seen.has(it.entityId)) {
+        seen.add(it.entityId);
+        items.push(it);
+      }
+    }
     if (!items.length) {
       return this.emptyResult(query, parsed, 'לא נמצאו מקטים התואמים לתיאור. נסה ניסוח אחר.');
     }
 
+    const codeMakats = new Set(codeItems.map((i) => String(i.catalogNumber)));
     const groups = await this.catalog.groupByMakt(items as any);
     groups.sort((a, b) => {
+      // התאמות קוד שירות / מק"ט קודמות תמיד
+      const ca = codeMakats.has(a.catalogNumber) ? 1 : 0;
+      const cb = codeMakats.has(b.catalogNumber) ? 1 : 0;
+      if (ca !== cb) return cb - ca;
       const rank = (g: typeof a) =>
-        this.itemRelevanceScore(String(g.description ?? g.variants[0]?.description ?? ''), terms, phrase);
+        this.itemRelevanceScore(String(g.description ?? g.variants[0]?.description ?? ''), matchTerms, phrase);
       const ra = rank(a);
       const rb = rank(b);
       if (ra !== rb) return rb - ra;
@@ -241,6 +357,180 @@ export class SearchService {
   }
 
   private emptyResult(query: string, parsed: ParsedQuery, message: string) {
-    return { query, parsed, engine: 'local', count: 0, results: [], message };
+    return {
+      query,
+      parsed,
+      engine: 'local',
+      count: 0,
+      user_location: null as string | null,
+      results: [] as Record<string, unknown>[],
+      message,
+    };
+  }
+
+  /**
+   * השלמה אוטומטית: הצעות מונחים קיימים מהקטלוג (תיאורים + קודי שירות/מק"ט)
+   * לפי טקסט חלקי — להכוונת המשתמש למונחים קיימים.
+   */
+  async suggest(q: string, limit = 8): Promise<string[]> {
+    const raw = (q || '').trim();
+    if (raw.length < 2) return [];
+    const rows = await this.prisma.catalogItem.findMany({
+      where: {
+        isDeleted: false,
+        OR: [
+          { description: { contains: raw } },
+          { catalogPricelistNum: { startsWith: raw } },
+          { catalogNumber: { startsWith: raw } },
+        ],
+      },
+      select: { description: true, catalogPricelistNum: true, catalogNumber: true },
+      take: 120,
+    });
+    const nq = normalizeHebrew(raw);
+    const out = new Set<string>();
+    // קודי שירות / מק"ט שמתחילים בטקסט
+    for (const r of rows) {
+      if (r.catalogPricelistNum && r.catalogPricelistNum.toUpperCase().startsWith(raw.toUpperCase())) {
+        out.add(r.catalogPricelistNum);
+      }
+      if (out.size >= limit) break;
+    }
+    // תיאורי מוצר תואמים
+    for (const r of rows) {
+      if (out.size >= limit) break;
+      const desc = (r.description || '').trim();
+      if (desc && normalizeHebrew(desc).includes(nq)) out.add(desc);
+    }
+    return [...out].slice(0, limit);
+  }
+
+  // ===== שכבת שיחה: זיהוי כוונה + זיכרון קצר =====
+
+  /** סיווג כוונת המשתמש לפי מילות מפתח (ללא LLM). השוואה על טקסט מנורמל. */
+  private classifyIntent(text: string): 'search' | 'suppliers' | 'contact' {
+    const t = normalizeHebrew(text);
+    const has = (words: string[]) => words.some((w) => t.includes(normalizeHebrew(w)));
+    if (
+      has(['טלפון', 'נייד', 'מייל', 'דוא"ל', 'כתובת', 'ליצור קשר', 'יצירת קשר', 'איך מתקשרים', 'פרטי קשר', 'מספר של'])
+    ) {
+      return 'contact';
+    }
+    if (has(['מספק', 'נותן שירות', 'מי נותן', 'ספקים', 'מורשה', 'מורשים', 'היכן אפשר', 'איפה אפשר'])) {
+      return 'suppliers';
+    }
+    return 'search';
+  }
+
+  /** ניסיון לזהות מק"ט/קוד שירות בתוך הטקסט. */
+  private async resolveMakatFromText(text: string): Promise<string | null> {
+    const items = await this.searchByCode(text);
+    return items[0]?.catalogNumber ?? null;
+  }
+
+  private searchReply(res: Awaited<ReturnType<SearchService['runAiSearch']>>, ctx: ChatContext): ChatResponse {
+    ctx.makat = (res.results[0]?.catalogNumber as string) ?? ctx.makat ?? null;
+    return {
+      intent: 'search',
+      context: ctx,
+      reply: `מצאתי ${res.count} מק"טים מתאימים${
+        res.user_location ? ` · ${res.user_location}` : ''
+      }. הנה המובילים — אפשר ללחוץ לפתיחה, או לשאול "מי מספק?" / "מה הטלפון?":`,
+      results: res.results.slice(0, 4),
+      quickReplies: ['מי מספק?', 'מה הטלפון?', 'חיפוש חדש'],
+    };
+  }
+
+  /**
+   * שכבת השיחה של העוזר החכם: מפרקת את המשפט לכוונה + ישות,
+   * שומרת זיכרון קצר (המק"ט האחרון), ומחזירה תשובה מובנית.
+   */
+  async chat(message: string, ctxIn: ChatContext = {}): Promise<ChatResponse> {
+    const text = (message || '').trim();
+    const ctx: ChatContext = { ...ctxIn };
+
+    // המשך שאלת מיקום (מחכים ליישוב עבור חיפוש קודם)
+    if (ctx.awaitingLocation && ctx.product) {
+      const skip = /^(דלג|לא משנה|לא חשוב|אין|לא)$/.test(normalizeHebrew(text));
+      const product = ctx.product;
+      const res = await this.runAiSearch(skip ? product : `${product} ${text}`);
+      ctx.awaitingLocation = false;
+      ctx.product = null;
+      ctx.location = skip ? null : text;
+      if (!res.count) {
+        return {
+          intent: 'search',
+          context: ctx,
+          reply: 'לא נמצאו תוצאות. נסו לנסח מחדש או בחרו קטגוריה:',
+          quickReplies: SUGGESTED_CATEGORIES,
+        };
+      }
+      return this.searchReply(res, ctx);
+    }
+
+    const intent = this.classifyIntent(text);
+
+    // כוונת ספקים / פרטי קשר — נדרש מק"ט (מהטקסט או מהזיכרון)
+    if (intent === 'contact' || intent === 'suppliers') {
+      const makat = (await this.resolveMakatFromText(text)) ?? ctx.makat ?? null;
+      if (!makat) {
+        return {
+          intent,
+          context: ctx,
+          reply: 'על איזה מוצר או מק"ט? כתבו מק"ט, קוד שירות או שם מוצר ואחזיר את הספקים המורשים.',
+          quickReplies: SUGGESTED_CATEGORIES,
+        };
+      }
+      const suppliers = await this.catalog.getSuppliersForMakt(makat);
+      ctx.makat = makat;
+      if (!suppliers.length) {
+        return { intent, context: ctx, reply: `לא נמצאו ספקים מורשים למק"ט ${makat}.` };
+      }
+      const city = ctx.location ? this.geo.normalizeCity(ctx.location) : null;
+      const ranked = this.geo.rankSuppliers(city, suppliers as any);
+      const label = intent === 'contact' ? 'פרטי הקשר של הספקים המורשים' : 'הספקים המורשים';
+      return {
+        intent,
+        context: ctx,
+        reply: `${label} למק"ט ${makat} (${ranked.length}):`,
+        suppliers: ranked,
+        quickReplies: ['חיפוש חדש'],
+      };
+    }
+
+    // כוונת חיפוש מוצר
+    if (text.length < 2) {
+      return {
+        intent: 'search',
+        context: ctx,
+        reply: 'מה תרצו לחפש? אפשר לתאר מוצר או שירות, מק"ט או קוד שירות.',
+        quickReplies: SUGGESTED_CATEGORIES,
+      };
+    }
+    const res = await this.runAiSearch(text);
+    if (!res.count) {
+      return {
+        intent: 'search',
+        context: ctx,
+        reply: res.message || 'לא נמצאו תוצאות. נסו לנסח מחדש או בחרו קטגוריה:',
+        quickReplies: SUGGESTED_CATEGORIES,
+      };
+    }
+    ctx.makat = (res.results[0]?.catalogNumber as string) ?? null;
+    // אם אין מיקום — שאלת הכוונה על יישוב
+    if (!res.user_location) {
+      ctx.product = text;
+      ctx.awaitingLocation = true;
+      const terms = res.parsed.product_terms.join(', ') || text;
+      return {
+        intent: 'search',
+        context: ctx,
+        followup: 'location',
+        reply: `מצאתי ${res.count} מק"טים לגבי "${terms}". באיזה יישוב אתם? כך אאתר את הספק הקרוב ביותר. (אפשר "דלג")`,
+        results: res.results.slice(0, 4),
+        quickReplies: ['דלג'],
+      };
+    }
+    return this.searchReply(res, ctx);
   }
 }

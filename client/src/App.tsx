@@ -3,6 +3,7 @@ import { SearchView } from './components/SearchView';
 import { VariantView } from './components/VariantView';
 import { AdminView } from './components/AdminView';
 import { Toast } from './components/Toast';
+import { ChatBot } from './components/ChatBot';
 import { useApp } from './state/AppContext';
 
 export function App() {
@@ -12,6 +13,7 @@ export function App() {
       <Header />
       {view === 'search' ? <SearchView /> : view === 'variant' ? <VariantView /> : <AdminView />}
       <Toast />
+      <ChatBot />
     </div>
   );
 }

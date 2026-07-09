@@ -1,8 +1,11 @@
 import type {
   AiSearchResponse,
+  ChatContext,
+  ChatResponse,
   ConfigMapRow,
   ItemDetail,
   SearchResponse,
+  Supplier,
   SyncPlan,
   SyncRun,
 } from './types';
@@ -53,6 +56,12 @@ export const api = {
     return handle<ItemDetail>(await fetch(`/api/item/${encodeURIComponent(entityId)}`));
   },
 
+  async getMaktSuppliers(
+    makt: string,
+  ): Promise<{ catalogNumber: string; count: number; suppliers: Supplier[] }> {
+    return handle(await fetch(`/api/makt/${encodeURIComponent(makt)}/suppliers`));
+  },
+
   async aiSearch(query: string): Promise<AiSearchResponse> {
     return handle<AiSearchResponse>(
       await fetch('/api/ai/search', {
@@ -61,6 +70,27 @@ export const api = {
         body: JSON.stringify({ query }),
       }),
     );
+  },
+
+  async chat(message: string, context: ChatContext): Promise<ChatResponse> {
+    return handle<ChatResponse>(
+      await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, context }),
+      }),
+    );
+  },
+
+  async suggest(q: string): Promise<string[]> {
+    try {
+      const res = await fetch(`/api/ai/suggest?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return [];
+      const body = (await res.json()) as { suggestions?: string[] };
+      return body.suggestions || [];
+    } catch {
+      return [];
+    }
   },
 
   exportSearchUrl(params: { q: string; match: string; field: string }): string {

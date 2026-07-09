@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as XLSX from 'xlsx';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,6 +30,33 @@ export class EtlService {
 
   private toLevelInt(v: unknown): number {
     return parseInt(normalizeIntPart(v), 10) || 0;
+  }
+
+  /**
+   * טוען מיפוי מק"ט -> Catalog_PricelistNum מקובץ קטלוג השיקום (CSV).
+   * מדלג על ערכים ריקים/NULL. הקובץ אופציונלי — אם חסר, מוחזר מיפוי ריק.
+   */
+  loadPricelistMap(): Map<string, string> {
+    const map = new Map<string, string>();
+    const path = dataFile(process.env.CATALOG_PRICELIST_FILE || 'shikum catalog.csv');
+    if (!fs.existsSync(path)) {
+      this.logger.warn(`קובץ קטלוג המחירון לא נמצא (${path}) — דילוג על Catalog_PricelistNum`);
+      return map;
+    }
+    const wb = XLSX.readFile(path, { raw: false });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], {
+      defval: null,
+      raw: false,
+    });
+    for (const r of rows) {
+      const cn = normalizeCatalogNumber(r['ShikumCatalog_CatalogNumber']);
+      const raw = r['Catalog_PricelistNum'];
+      const val = raw === null || raw === undefined ? '' : String(raw).trim();
+      if (!val || val.toUpperCase() === 'NULL') continue;
+      if (cn && cn !== '0') map.set(cn, val);
+    }
+    this.logger.log(`Catalog_PricelistNum: ${map.size} מק"טים נטענו מהקטלוג`);
+    return map;
   }
 
   /** ממיר רשומת פריט גולמית לשורת DB (כולל Variant ID מספרי). */
@@ -150,9 +179,17 @@ export class EtlService {
 
     await this.config.seedDefaults();
 
-    // פריטים — בניית Variant ID + dedup
+    // מיפוי מק"ט -> Catalog_PricelistNum מקובץ קטלוג השיקום
+    const pricelist = this.loadPricelistMap();
+
+    // פריטים — בניית Variant ID + dedup + העשרת מספר מחירון
     const itemRows: Prisma.CatalogItemCreateManyInput[] = [];
-    for (const rec of itemRecs) itemRows.push(await this.buildItemRow(rec));
+    for (const rec of itemRecs) {
+      const row = await this.buildItemRow(rec);
+      const pl = pricelist.get(String(row.catalogNumber));
+      if (pl) row.catalogPricelistNum = pl;
+      itemRows.push(row);
+    }
     const dedupedItems = this.dedupeItems(itemRows);
 
     const supplierRows = this.dedupeBy(

@@ -1,12 +1,23 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
-import { IsString, MaxLength, MinLength } from 'class-validator';
-import { SearchService } from './search.service';
+import { Body, Controller, DefaultValuePipe, Get, HttpCode, Post, Query } from '@nestjs/common';
+import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ChatContext, SearchService } from './search.service';
 
 class AiSearchDto {
   @IsString()
   @MinLength(3, { message: 'השאילתה קצרה מדי (מינימום 3 תווים)' })
   @MaxLength(500)
   query!: string;
+}
+
+class ChatDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  message!: string;
+
+  @IsOptional()
+  @IsObject()
+  context?: ChatContext;
 }
 
 @Controller()
@@ -26,5 +37,16 @@ export class SearchController {
   @HttpCode(200)
   async aiSearch(@Body() body: AiSearchDto) {
     return this.search.runAiSearch(body.query.trim());
+  }
+
+  @Post('api/ai/chat')
+  @HttpCode(200)
+  async chat(@Body() body: ChatDto) {
+    return this.search.chat(body.message.trim(), body.context || {});
+  }
+
+  @Get('api/ai/suggest')
+  async suggest(@Query('q', new DefaultValuePipe('')) q: string) {
+    return { suggestions: await this.search.suggest(q) };
   }
 }

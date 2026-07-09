@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { AiSearchResponse } from '../api/types';
 import { useApp } from '../state/AppContext';
+import { SuppliersPanel } from './SuppliersPanel';
 
 export function SmartSearch({ onSelect }: { onSelect: (entityId: string) => void }) {
   const { showToast } = useApp();
@@ -9,6 +10,15 @@ export function SmartSearch({ onSelect }: { onSelect: (entityId: string) => void
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<AiSearchResponse | null>(null);
+  const [openSuppliers, setOpenSuppliers] = useState<Set<string>>(new Set());
+
+  function toggleSuppliers(makt: string) {
+    setOpenSuppliers((prev) => {
+      const next = new Set(prev);
+      next.has(makt) ? next.delete(makt) : next.add(makt);
+      return next;
+    });
+  }
 
   async function run() {
     if (query.trim().length < 3) {
@@ -16,6 +26,7 @@ export function SmartSearch({ onSelect }: { onSelect: (entityId: string) => void
       return;
     }
     setLoading(true);
+    setOpenSuppliers(new Set());
     try {
       const data = await api.aiSearch(query.trim());
       setRes(data);
@@ -68,30 +79,54 @@ export function SmartSearch({ onSelect }: { onSelect: (entityId: string) => void
                 {res.parsed.explanation}
                 {res.user_location ? ` · מיקום: ${res.user_location}` : ''}
               </p>
-              {res.results.map((r) => (
-                <div className="result-group" key={r.catalogNumber}>
-                  <div
-                    className="group-head"
-                    onClick={() => r.variants[0] && onSelect(r.variants[0].entityId)}
-                  >
-                    <span className="makt-badge">{r.catalogNumber}</span>
-                    <span className="group-title">{r.description || '—'}</span>
-                    <div className="group-meta">
-                      <span className="chip">{r.variant_count} וריאנטים</span>
-                      <span className="chip green">{r.supplier_count} ספקים</span>
+              {res.results.map((r) => {
+                const supOpen = openSuppliers.has(r.catalogNumber);
+                return (
+                  <div className="result-group" key={r.catalogNumber}>
+                    <div
+                      className="group-head"
+                      onClick={() => r.variants[0] && onSelect(r.variants[0].entityId)}
+                    >
+                      <span className="makt-badge">{r.catalogNumber}</span>
+                      <span className="group-title">{r.description || '—'}</span>
+                      <div className="group-meta">
+                        {r.variants[0]?.catalogPricelistNum && (
+                          <span className="chip amber">קוד שירות: {r.variants[0].catalogPricelistNum}</span>
+                        )}
+                        <span className="chip">{r.variant_count} וריאנטים</span>
+                        <span className="chip green">{r.supplier_count} ספקים</span>
+                      </div>
                     </div>
+                    {r.nearest_supplier && (
+                      <div className="variant-row" style={{ cursor: 'default' }}>
+                        <span className="nearest-tag">ספק קרוב</span>
+                        <span>{r.nearest_supplier.name}</span>
+                        <span className="spacer" />
+                        <span className="chip">{r.nearest_supplier.city}</span>
+                        <span className="chip green">{r.nearest_supplier.proximity_label}</span>
+                      </div>
+                    )}
+                    {r.suppliers.length > 0 && (
+                      <div className="variant-row" style={{ cursor: 'default' }}>
+                        <button
+                          className="variant-open"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSuppliers(r.catalogNumber);
+                          }}
+                        >
+                          {supOpen ? '▲ הסתר ספקים' : `▼ הצג ספקים מורשים (${r.suppliers.length})`}
+                        </button>
+                      </div>
+                    )}
+                    {supOpen && (
+                      <div className="smart-suppliers">
+                        <SuppliersPanel key={r.catalogNumber} suppliers={r.suppliers} />
+                      </div>
+                    )}
                   </div>
-                  {r.nearest_supplier && (
-                    <div className="variant-row" style={{ cursor: 'default' }}>
-                      <span className="nearest-tag">ספק קרוב</span>
-                      <span>{r.nearest_supplier.name}</span>
-                      <span className="spacer" />
-                      <span className="chip">{r.nearest_supplier.city}</span>
-                      <span className="chip green">{r.nearest_supplier.proximity_label}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </>
           )}
         </>

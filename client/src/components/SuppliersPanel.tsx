@@ -1,0 +1,167 @@
+import { Fragment, useState } from 'react';
+import type { Supplier } from '../api/types';
+
+/** שדות ספק נוספים שנחשפים בהרחבת שורת הספק (כולם כבר מגיעים מה-API). */
+const SUPPLIER_DETAIL: [keyof Supplier, string][] = [
+  ['modSupplierId', 'מספר ספק משהב"ט'],
+  ['rehabSupplierId', 'מספר ספק שיקום'],
+  ['mobile', 'נייד'],
+  ['workPhone', 'טלפון עבודה'],
+  ['landline', 'נייח'],
+  ['email', 'דוא"ל'],
+  ['street', 'רחוב ומספר בית'],
+  ['specialization', 'התמחות'],
+  ['subSpecialization', 'תת התמחות'],
+  ['therapeuticApproach', 'גישה טיפולית'],
+  ['validFrom', 'תחילת תוקף'],
+  ['validTo', 'סיום תוקף'],
+];
+
+function phone(s: { mobile?: string | null; workPhone?: string | null; landline?: string | null }) {
+  return s.mobile || s.workPhone || s.landline || '—';
+}
+
+/**
+ * מציג את רשימת הספקים המורשים עם סינון חופשי ושורות ניתנות להרחבה
+ * (כל שדות ה-XLSX). רכיב משותף לדף הווריאנט, לחיפוש ולחיפוש החכם.
+ * איפוס הסינון/ההרחבות נעשה ע"י key חיצוני (למשל entityId / מק"ט).
+ */
+export function SuppliersPanel({
+  suppliers,
+  title = 'ספקים מורשים',
+}: {
+  suppliers: Supplier[];
+  title?: string;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState('');
+  const [allOpen, setAllOpen] = useState(false);
+
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  const query = filter.trim().toLowerCase();
+  const filtered = query
+    ? suppliers.filter((s) =>
+        [
+          s.name,
+          s.city,
+          s.district,
+          s.profession,
+          s.specialization,
+          s.subSpecialization,
+          s.therapeuticApproach,
+          s.email,
+          s.street,
+          s.modSupplierId,
+          s.rehabSupplierId,
+          s.mobile,
+          s.workPhone,
+          s.landline,
+        ].some((v) => v && String(v).toLowerCase().includes(query)),
+      )
+    : suppliers;
+
+  return (
+    <section className="card">
+      <div className="panel-head">
+        <h2>{title}</h2>
+        <div className="panel-head-actions">
+          {suppliers.length > 0 && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setAllOpen((v) => !v)}
+              title="הצג/הסתר את כל שדות הספקים"
+            >
+              {allOpen ? '▲ הסתר שדות' : '▼ הצג את כל השדות'}
+            </button>
+          )}
+          <span className="count-pill">
+            {query ? `${filtered.length} / ${suppliers.length}` : suppliers.length}
+          </span>
+        </div>
+      </div>
+      {suppliers.length === 0 ? (
+        <p className="empty-state">אין ספקים מורשים למק"ט זה</p>
+      ) : (
+        <>
+          <input
+            className="sup-filter"
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="סינון ספקים — שם, יישוב, מחוז, מקצוע, התמחות…"
+          />
+          {filtered.length === 0 ? (
+            <p className="empty-state">לא נמצאו ספקים התואמים לסינון</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>שם ספק</th>
+                    <th>יישוב</th>
+                    <th>מחוז</th>
+                    <th>טלפון</th>
+                    <th>מקצוע</th>
+                    <th aria-label="פרטים" style={{ width: 32 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((s) => {
+                    const open = allOpen || expanded.has(s.modSupplierId);
+                    const details = SUPPLIER_DETAIL.filter(([k]) => {
+                      const v = s[k];
+                      return v !== null && v !== undefined && v !== '';
+                    });
+                    return (
+                      <Fragment key={s.modSupplierId}>
+                        <tr
+                          className="sup-row"
+                          onClick={() => details.length && toggle(s.modSupplierId)}
+                        >
+                          <td>{s.name || '—'}</td>
+                          <td>{s.city || '—'}</td>
+                          <td>{s.district || '—'}</td>
+                          <td>{phone(s)}</td>
+                          <td>{s.profession || '—'}</td>
+                          <td className="sup-caret">
+                            {details.length ? (open ? '▲' : '▼') : ''}
+                          </td>
+                        </tr>
+                        {open && (
+                          <tr className="sup-detail-row">
+                            <td colSpan={6}>
+                              <div className="detail-grid">
+                                {details.map(([k, label]) => {
+                                  const v = String(s[k]);
+                                  return (
+                                    <div className="detail-cell" key={String(k)}>
+                                      <div className="k">{label}</div>
+                                      <div className="v">
+                                        {k === 'email' ? <a href={`mailto:${v}`}>{v}</a> : v}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}

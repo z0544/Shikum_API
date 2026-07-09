@@ -43,6 +43,7 @@ export class CatalogRepository {
           { catalogNumber: filter },
           { description: filter },
           { entitledTypeRaw: filter },
+          { catalogPricelistNum: filter },
         ],
       };
     } else {
