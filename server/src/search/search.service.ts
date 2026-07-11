@@ -350,6 +350,7 @@ export class SearchService {
       parsed,
       engine: 'local',
       count: results.length,
+      total_makts: groups.length,
       user_location: userCity,
       results,
       message: null,
@@ -362,6 +363,7 @@ export class SearchService {
       parsed,
       engine: 'local',
       count: 0,
+      total_makts: 0,
       user_location: null as string | null,
       results: [] as Record<string, unknown>[],
       message,
@@ -428,14 +430,42 @@ export class SearchService {
     return items[0]?.catalogNumber ?? null;
   }
 
+  /** מילות כוונה/שאלה שיש להסיר לפני חיפוש מוצר בתוך שאלת ספקים/קשר. */
+  private static readonly INTENT_WORDS = [
+    'מי', 'מספק', 'מספקים', 'נותן', 'נותנים', 'שירות', 'ספק', 'ספקים', 'מורשה', 'מורשים',
+    'טלפון', 'נייד', 'מייל', 'דוא"ל', 'כתובת', 'פרטי', 'קשר', 'של', 'מה', 'מהו', 'היכן',
+    'איפה', 'אפשר', 'להשיג', 'את',
+  ];
+
+  private stripIntentWords(text: string): string {
+    const stop = new Set(SearchService.INTENT_WORDS.map((w) => normalizeHebrew(w)));
+    const isStop = (w: string): boolean => {
+      const n = normalizeHebrew(w);
+      if (stop.has(n)) return true;
+      // גם צורה עם ה"א הידיעה מובילה (למשל "הטלפון" -> "טלפון")
+      return n.startsWith('ה') && n.length > 2 && stop.has(n.slice(1));
+    };
+    return text
+      .split(/\s+/)
+      .map((w) => w.replace(/[^0-9A-Za-zא-ת-]/g, ''))
+      .filter((w) => w && !isStop(w))
+      .join(' ')
+      .trim();
+  }
+
   private searchReply(res: Awaited<ReturnType<SearchService['runAiSearch']>>, ctx: ChatContext): ChatResponse {
     ctx.makat = (res.results[0]?.catalogNumber as string) ?? ctx.makat ?? null;
+    ctx.location = (res.user_location as string | null) ?? ctx.location ?? null;
+    const total = res.total_makts;
+    const shown = Math.min(res.results.length, 4);
+    const countText =
+      total > shown ? `מצאתי ${total} מק"טים מתאימים — הנה ${shown} המובילים` : `הנה ${total} התוצאות`;
     return {
       intent: 'search',
       context: ctx,
-      reply: `מצאתי ${res.count} מק"טים מתאימים${
+      reply: `${countText}${
         res.user_location ? ` · ${res.user_location}` : ''
-      }. הנה המובילים — אפשר ללחוץ לפתיחה, או לשאול "מי מספק?" / "מה הטלפון?":`,
+      }. אפשר ללחוץ לפתיחה, או לשאול "מי מספק?" / "מה הטלפון?":`,
       results: res.results.slice(0, 4),
       quickReplies: ['מי מספק?', 'מה הטלפון?', 'חיפוש חדש'],
     };
@@ -449,30 +479,49 @@ export class SearchService {
     const text = (message || '').trim();
     const ctx: ChatContext = { ...ctxIn };
 
-    // המשך שאלת מיקום (מחכים ליישוב עבור חיפוש קודם)
-    if (ctx.awaitingLocation && ctx.product) {
-      const skip = /^(דלג|לא משנה|לא חשוב|אין|לא)$/.test(normalizeHebrew(text));
-      const product = ctx.product;
-      const res = await this.runAiSearch(skip ? product : `${product} ${text}`);
-      ctx.awaitingLocation = false;
-      ctx.product = null;
-      ctx.location = skip ? null : text;
-      if (!res.count) {
-        return {
-          intent: 'search',
-          context: ctx,
-          reply: 'לא נמצאו תוצאות. נסו לנסח מחדש או בחרו קטגוריה:',
-          quickReplies: SUGGESTED_CATEGORIES,
-        };
-      }
-      return this.searchReply(res, ctx);
-    }
-
     const intent = this.classifyIntent(text);
 
-    // כוונת ספקים / פרטי קשר — נדרש מק"ט (מהטקסט או מהזיכרון)
+    // המשך שאלת מיקום — רק כשמחכים ליישוב וזו תשובת חיפוש רגילה (לא ספקים/קשר)
+    if (ctx.awaitingLocation && ctx.product && intent === 'search') {
+      const skip = /^(דלג|לא משנה|לא חשוב|אין|לא)$/.test(normalizeHebrew(text));
+      const isCity = !!this.geo.findCityInText(text);
+      if (skip || isCity) {
+        const product = ctx.product;
+        const res = await this.runAiSearch(skip ? product : `${product} ${text}`);
+        ctx.awaitingLocation = false;
+        ctx.product = null;
+        if (!res.count) {
+          ctx.location = null;
+          return {
+            intent: 'search',
+            context: ctx,
+            reply: 'לא נמצאו תוצאות. נסו לנסח מחדש או בחרו קטגוריה:',
+            quickReplies: SUGGESTED_CATEGORIES,
+          };
+        }
+        return this.searchReply(res, ctx);
+      }
+      // התשובה אינה יישוב ואינה "דלג" — כנראה נושא חדש: משחררים את המתנת המיקום וממשיכים
+      ctx.awaitingLocation = false;
+      ctx.product = null;
+    }
+
+    // כוונת ספקים / פרטי קשר — נענה גם בתור אחד ("מי מספק כיסא גלגלים?")
     if (intent === 'contact' || intent === 'suppliers') {
-      const makat = (await this.resolveMakatFromText(text)) ?? ctx.makat ?? null;
+      ctx.awaitingLocation = false;
+      ctx.product = null;
+      let makat = await this.resolveMakatFromText(text);
+      if (!makat) {
+        const cleaned = this.stripIntentWords(text);
+        if (cleaned.length >= 2) {
+          const res = await this.runAiSearch(cleaned);
+          if (res.count) {
+            makat = res.results[0].catalogNumber as string;
+            if (res.user_location) ctx.location = res.user_location;
+          }
+        }
+      }
+      makat = makat ?? ctx.makat ?? null;
       if (!makat) {
         return {
           intent,
@@ -484,7 +533,7 @@ export class SearchService {
       const suppliers = await this.catalog.getSuppliersForMakt(makat);
       ctx.makat = makat;
       if (!suppliers.length) {
-        return { intent, context: ctx, reply: `לא נמצאו ספקים מורשים למק"ט ${makat}.` };
+        return { intent, context: ctx, reply: `לא נמצאו ספקים מורשים למק"ט ${makat}.`, quickReplies: ['חיפוש חדש'] };
       }
       const city = ctx.location ? this.geo.normalizeCity(ctx.location) : null;
       const ranked = this.geo.rankSuppliers(city, suppliers as any);
@@ -526,7 +575,7 @@ export class SearchService {
         intent: 'search',
         context: ctx,
         followup: 'location',
-        reply: `מצאתי ${res.count} מק"טים לגבי "${terms}". באיזה יישוב אתם? כך אאתר את הספק הקרוב ביותר. (אפשר "דלג")`,
+        reply: `מצאתי ${res.total_makts} מק"טים לגבי "${terms}". באיזה יישוב אתם? כך אאתר את הספק הקרוב ביותר. (אפשר "דלג")`,
         results: res.results.slice(0, 4),
         quickReplies: ['דלג'],
       };

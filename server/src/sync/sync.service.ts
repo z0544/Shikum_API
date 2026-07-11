@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EtlService } from '../etl/etl.service';
 import { CatalogRepository } from '../catalog/catalog.repository';
+import { SearchService } from '../search/search.service';
 import { FileKind } from '../common/columns';
 import { readKmsFile } from '../etl/excel-loader';
 
@@ -76,6 +77,7 @@ export class SyncService {
     private readonly prisma: PrismaService,
     private readonly etl: EtlService,
     private readonly catalogRepo: CatalogRepository,
+    private readonly search: SearchService,
   ) {}
 
   private cmp(v: unknown): string {
@@ -314,6 +316,7 @@ export class SyncService {
         },
       });
       this.catalogRepo.invalidateSupplierCache();
+      if (kind === 'items') this.search.invalidateVocab();
     } catch (err) {
       await this.prisma.syncRun.update({
         where: { id: run.id },

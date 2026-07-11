@@ -15,6 +15,7 @@ import { AdminGuard } from './admin.guard';
 import { EtlService } from '../etl/etl.service';
 import { ConfigMapService } from '../config-map/config-map.service';
 import { CatalogRepository } from '../catalog/catalog.repository';
+import { SearchService } from '../search/search.service';
 
 class ConfigMapDto {
   @IsString() @MinLength(1) field!: string;
@@ -30,12 +31,14 @@ export class AdminController {
     private readonly etl: EtlService,
     private readonly config: ConfigMapService,
     private readonly catalogRepo: CatalogRepository,
+    private readonly search: SearchService,
   ) {}
 
   @Post('reload-data')
   async reload() {
     const stats = await this.etl.processData();
     this.catalogRepo.invalidateSupplierCache();
+    this.search.invalidateVocab();
     return { status: 'ok', rows: stats };
   }
 

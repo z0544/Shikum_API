@@ -32,6 +32,7 @@ export function ChatBot() {
   const idRef = useRef(0);
   const bodyRef = useRef<HTMLDivElement>(null);
   const suggestTimer = useRef<number>();
+  const suggestSeq = useRef(0);
 
   const nextId = () => ++idRef.current;
   const pushBot = (m: Omit<Msg, 'id' | 'role'>) =>
@@ -50,6 +51,8 @@ export function ChatBot() {
   async function send(text: string, ctxOverride?: ChatContext) {
     const q = text.trim();
     if (!q || loading) return;
+    window.clearTimeout(suggestTimer.current);
+    suggestSeq.current++; // מבטל בקשות השלמה שעדיין בדרך
     setInput('');
     setSuggests([]);
     setQuick([]);
@@ -72,6 +75,15 @@ export function ChatBot() {
     send(message, { ...ctx, makat });
   }
 
+  /** לחיצה על כפתור מהיר — "חיפוש חדש" מאפס את השיחה, אחרת נשלח כהודעה. */
+  function onQuick(qr: string) {
+    if (qr === 'חיפוש חדש') {
+      newConversation();
+      return;
+    }
+    send(qr);
+  }
+
   function onInputChange(value: string) {
     setInput(value);
     window.clearTimeout(suggestTimer.current);
@@ -80,8 +92,10 @@ export function ChatBot() {
       setSuggests([]);
       return;
     }
+    const seq = ++suggestSeq.current;
     suggestTimer.current = window.setTimeout(async () => {
-      setSuggests(await api.suggest(v));
+      const r = await api.suggest(v);
+      if (seq === suggestSeq.current) setSuggests(r); // מתעלמים מתשובות שאיחרו
     }, 200);
   }
 
@@ -202,7 +216,7 @@ export function ChatBot() {
             !loading && (
               <div className="chat-quick">
                 {quick.map((qr) => (
-                  <button key={qr} className="chat-chip" onClick={() => send(qr)}>
+                  <button key={qr} className="chat-chip" onClick={() => onQuick(qr)}>
                     {qr}
                   </button>
                 ))}
