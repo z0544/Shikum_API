@@ -138,3 +138,27 @@ model ItemHistory {
   @@index([syncRunId])
   @@map("item_history")
 }
+
+/// שאילתות צ'אט ללא מענה — backlog להרחבת מילון הנרדפות.
+model UnansweredQuery {
+  id        Int      @id @default(autoincrement())
+  query     String   @unique @map("query") // טקסט מנורמל
+  rawSample String?  @map("raw_sample")
+  count     Int      @default(1) @map("count")
+  firstSeen DateTime @default(now()) @map("first_seen")
+  lastSeen  DateTime @updatedAt @map("last_seen")
+
+  @@map("unanswered_queries")
+}
+
+/// מילון נרדפות הניתן לעריכה (ללא deploy): מונח -> מונח רשמי בקטלוג.
+model Synonym {
+  id        Int      @id @default(autoincrement())
+  term      String   @map("term") // מקור, מנורמל
+  target    String   @map("target") // יעד רשמי
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([term, target], name: "term_target")
+  @@index([term])
+  @@map("synonyms")
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import type { ConfigMapRow, SyncPlan, SyncRun } from '../api/types';
+import type { ConfigMapRow, SynonymRow, SyncPlan, SyncRun, UnansweredRow } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { Breadcrumbs } from './Header';
 
@@ -19,19 +19,48 @@ export function AdminView() {
   const [busy, setBusy] = useState(false);
   const [runs, setRuns] = useState<SyncRun[]>([]);
   const [config, setConfig] = useState<ConfigMapRow[]>([]);
+  const [synonyms, setSynonyms] = useState<SynonymRow[]>([]);
+  const [unanswered, setUnanswered] = useState<UnansweredRow[]>([]);
+  const [prefillTerm, setPrefillTerm] = useState('');
 
   const hasToken = adminToken.trim().length > 0;
 
   async function refresh() {
     if (!hasToken) return;
     try {
-      const [r, c] = await Promise.all([api.syncRuns(adminToken), api.configList(adminToken)]);
+      const [r, c, syn, un] = await Promise.all([
+        api.syncRuns(adminToken),
+        api.configList(adminToken),
+        api.synonymsList(adminToken),
+        api.unansweredList(adminToken),
+      ]);
       setRuns(r.runs);
       setConfig(c.items);
+      setSynonyms(syn.items);
+      setUnanswered(un.items);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         showToast(e.message, 'error');
       }
+    }
+  }
+
+  async function addSynonym(term: string, target: string) {
+    try {
+      await api.synonymAdd({ term, target }, adminToken);
+      showToast('נרדף נוסף', 'ok');
+      refresh();
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'שגיאה', 'error');
+    }
+  }
+
+  async function deleteSynonym(id: number) {
+    try {
+      await api.synonymDelete(id, adminToken);
+      refresh();
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'שגיאה', 'error');
     }
   }
   useEffect(() => {
@@ -231,6 +260,15 @@ export function AdminView() {
             </section>
 
             <ConfigEditor rows={config} onSave={saveConfig} />
+
+            <SynonymEditor
+              rows={synonyms}
+              prefill={prefillTerm}
+              onAdd={addSynonym}
+              onDelete={deleteSynonym}
+            />
+
+            <UnansweredTable rows={unanswered} onSuggest={setPrefillTerm} />
           </>
         )}
       </main>
@@ -315,6 +353,137 @@ function ConfigEditor({
           </tbody>
         </table>
       </div>
+    </section>
+  );
+}
+
+function SynonymEditor({
+  rows,
+  prefill,
+  onAdd,
+  onDelete,
+}: {
+  rows: SynonymRow[];
+  prefill: string;
+  onAdd: (term: string, target: string) => void;
+  onDelete: (id: number) => void;
+}) {
+  const [term, setTerm] = useState('');
+  const [target, setTarget] = useState('');
+  useEffect(() => {
+    if (prefill) setTerm(prefill);
+  }, [prefill]);
+
+  function submit() {
+    if (!term.trim() || !target.trim()) return;
+    onAdd(term.trim(), target.trim());
+    setTerm('');
+    setTarget('');
+  }
+
+  return (
+    <section className="card">
+      <div className="panel-head">
+        <h2>מילון נרדפות (מונח → מונח רשמי)</h2>
+        <span className="count-pill">{rows.length}</span>
+      </div>
+      <p className="hint" style={{ marginTop: 0 }}>
+        מיפוי שפת דיבור/סלנג למונחים שבקטלוג — משפיע מיד על החיפוש החכם והעוזר, ללא deploy.
+      </p>
+      <div className="search-row">
+        <div className="field grow">
+          <label>מונח (שפת משתמש)</label>
+          <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="למשל: עגלה" />
+        </div>
+        <div className="field grow">
+          <label>מונח רשמי בקטלוג</label>
+          <input
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submit()}
+            placeholder="למשל: כיסא גלגלים"
+          />
+        </div>
+        <button className="btn btn-primary" onClick={submit} disabled={!term.trim() || !target.trim()}>
+          הוסף
+        </button>
+      </div>
+      {rows.length > 0 && (
+        <div className="table-wrap" style={{ marginTop: 12 }}>
+          <table className="data">
+            <thead>
+              <tr>
+                <th>מונח</th>
+                <th>→ מונח רשמי</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.term}</td>
+                  <td>{r.target}</td>
+                  <td>
+                    <button className="btn btn-ghost btn-sm" onClick={() => onDelete(r.id)}>
+                      מחק
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function UnansweredTable({
+  rows,
+  onSuggest,
+}: {
+  rows: UnansweredRow[];
+  onSuggest: (query: string) => void;
+}) {
+  return (
+    <section className="card">
+      <div className="panel-head">
+        <h2>שאילתות ללא מענה (backlog לנרדפות)</h2>
+        <span className="count-pill">{rows.length}</span>
+      </div>
+      <p className="hint" style={{ marginTop: 0 }}>
+        שאילתות שהחזירו "לא נמצאו תוצאות", לפי שכיחות. "הוסף נרדף" ממלא את המונח בטופס למעלה.
+      </p>
+      {rows.length === 0 ? (
+        <p className="empty-state">אין עדיין שאילתות ללא מענה</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>שאילתה</th>
+                <th>פעמים</th>
+                <th>אחרון</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.rawSample || r.query}</td>
+                  <td>{r.count}</td>
+                  <td>{new Date(r.lastSeen).toLocaleDateString('he-IL')}</td>
+                  <td>
+                    <button className="btn btn-ghost btn-sm" onClick={() => onSuggest(r.rawSample || r.query)}>
+                      → הוסף נרדף
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

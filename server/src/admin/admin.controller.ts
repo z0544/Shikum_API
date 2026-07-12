@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   Param,
@@ -21,6 +22,11 @@ class ConfigMapDto {
   @IsString() @MinLength(1) field!: string;
   @IsString() @MinLength(1) textValue!: string;
   @IsInt() intValue!: number;
+}
+
+class SynonymDto {
+  @IsString() @MinLength(1) term!: string;
+  @IsString() @MinLength(1) target!: string;
 }
 
 /** ניהול: טעינה מחדש של הנתונים + עריכת מילון הקונפיגורציה. דורש X-Admin-Token. */
@@ -55,5 +61,27 @@ export class AdminController {
   @Delete('config-map/:id')
   async deleteConfig(@Param('id', ParseIntPipe) id: number) {
     return this.config.remove(id);
+  }
+
+  // --- שאילתות ללא מענה (backlog לנרדפות) ---
+  @Get('unanswered')
+  async unanswered(@Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number) {
+    return { items: await this.search.listUnanswered(Math.min(Math.max(limit, 1), 500)) };
+  }
+
+  // --- ניהול מילון נרדפות (ללא deploy) ---
+  @Get('synonyms')
+  async listSynonyms() {
+    return { items: await this.search.listSynonyms() };
+  }
+
+  @Put('synonyms')
+  async addSynonym(@Body() body: SynonymDto) {
+    return this.search.addSynonym(body.term, body.target);
+  }
+
+  @Delete('synonyms/:id')
+  async deleteSynonym(@Param('id', ParseIntPipe) id: number) {
+    return this.search.deleteSynonym(id);
   }
 }

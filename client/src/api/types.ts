@@ -115,6 +115,22 @@ export interface ChatResponse {
   context: ChatContext;
 }
 
+export interface UnansweredRow {
+  id: number;
+  query: string;
+  rawSample: string | null;
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+export interface SynonymRow {
+  id: number;
+  term: string;
+  target: string;
+  createdAt: string;
+}
+
 export interface SyncSummary {
   new: number;
   updated: number;

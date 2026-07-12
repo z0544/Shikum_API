@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeoService } from '../geo/geo.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { editDistance, fuzzyThreshold, normalizeHebrew } from '../common/hebrew';
-import { synonymsFor } from './synonyms';
+import { SYNONYMS } from './synonyms';
 
 // מילות עזר בעברית — לא משמשות לחיפוש
 const STOPWORDS = new Set(
@@ -176,12 +176,50 @@ export class SearchService {
     this.vocab = null;
   }
 
+  /** מילון נרדפות מאוחד: ברירות מחדל סטטיות + רשומות DB (ניתן לעריכה). נבנה פעם אחת. */
+  private synonymCache: Map<string, string[]> | null = null;
+
+  private async getSynonyms(): Promise<Map<string, string[]>> {
+    if (this.synonymCache) return this.synonymCache;
+    const map = new Map<string, string[]>();
+    const add = (term: string, targets: string[]) => {
+      const nk = normalizeHebrew(term);
+      if (!nk) return;
+      const arr = map.get(nk) ?? [];
+      for (const t of targets) if (t && !arr.includes(t)) arr.push(t);
+      map.set(nk, arr);
+    };
+    for (const [k, vals] of Object.entries(SYNONYMS)) add(k, vals);
+    try {
+      const rows = await this.prisma.synonym.findMany();
+      for (const r of rows) add(r.term, [r.target]);
+    } catch {
+      /* טבלה עשויה להיעדר לפני migration — נופלים לברירות המחדל */
+    }
+    this.synonymCache = map;
+    return map;
+  }
+
+  invalidateSynonyms(): void {
+    this.synonymCache = null;
+  }
+
+  private lookupSynonyms(map: Map<string, string[]>, text: string): string[] {
+    const norm = normalizeHebrew(text);
+    if (!norm) return [];
+    const out = new Set<string>();
+    if (map.has(norm)) map.get(norm)!.forEach((v) => out.add(v));
+    for (const w of norm.split(' ')) if (map.has(w)) map.get(w)!.forEach((v) => out.add(v));
+    return [...out];
+  }
+
   /** הרחבת מונחים: מקור + נרדפות + התאמה סלחנית (fuzzy) מול אוצר המילים. */
   private async expandTerms(terms: string[], phrase: string): Promise<string[]> {
     const out = new Set<string>();
     for (const t of terms) if (t) out.add(t);
-    for (const s of synonymsFor(phrase)) out.add(s);
-    for (const t of terms) for (const s of synonymsFor(t)) out.add(s);
+    const synMap = await this.getSynonyms();
+    for (const s of this.lookupSynonyms(synMap, phrase)) out.add(s);
+    for (const t of terms) for (const s of this.lookupSynonyms(synMap, t)) out.add(s);
 
     const vocab = await this.getVocab();
     for (const t of terms) {
@@ -301,6 +339,7 @@ export class SearchService {
       }
     }
     if (!items.length) {
+      void this.logUnanswered(query);
       return this.emptyResult(query, parsed, 'לא נמצאו מקטים התואמים לתיאור. נסה ניסוח אחר.');
     }
 
@@ -355,6 +394,53 @@ export class SearchService {
       results,
       message: null,
     };
+  }
+
+  // ===== תיעוד שאילתות ללא מענה + ניהול נרדפות =====
+
+  /** רושם שאילתה שלא הניבה תוצאות (upsert עם ספירה) — backlog לנרדפות. */
+  async logUnanswered(rawQuery: string): Promise<void> {
+    const q = normalizeHebrew(rawQuery);
+    if (q.length < 2) return;
+    try {
+      await this.prisma.unansweredQuery.upsert({
+        where: { query: q },
+        update: { count: { increment: 1 }, rawSample: rawQuery.trim() },
+        create: { query: q, rawSample: rawQuery.trim() },
+      });
+    } catch {
+      /* תיעוד בלבד — לא לשבור חיפוש */
+    }
+  }
+
+  listUnanswered(limit = 100) {
+    return this.prisma.unansweredQuery.findMany({
+      orderBy: [{ count: 'desc' }, { lastSeen: 'desc' }],
+      take: limit,
+    });
+  }
+
+  listSynonyms() {
+    return this.prisma.synonym.findMany({ orderBy: [{ term: 'asc' }, { target: 'asc' }] });
+  }
+
+  async addSynonym(term: string, target: string) {
+    const t = normalizeHebrew(term);
+    const tgt = (target || '').trim();
+    if (!t || !tgt) throw new Error('term/target חסרים');
+    const row = await this.prisma.synonym.upsert({
+      where: { term_target: { term: t, target: tgt } },
+      update: {},
+      create: { term: t, target: tgt },
+    });
+    this.invalidateSynonyms();
+    return row;
+  }
+
+  async deleteSynonym(id: number) {
+    await this.prisma.synonym.delete({ where: { id } });
+    this.invalidateSynonyms();
+    return { deleted: id };
   }
 
   private emptyResult(query: string, parsed: ParsedQuery, message: string) {

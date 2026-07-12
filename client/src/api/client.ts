@@ -6,8 +6,10 @@ import type {
   ItemDetail,
   SearchResponse,
   Supplier,
+  SynonymRow,
   SyncPlan,
   SyncRun,
+  UnansweredRow,
 } from './types';
 
 /** שגיאת API עם הודעה בעברית מהשרת. */
@@ -148,6 +150,29 @@ export const api = {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
         body: JSON.stringify(row),
+      }),
+    );
+  },
+  async unansweredList(token: string): Promise<{ items: UnansweredRow[] }> {
+    return handle(await fetch('/api/admin/unanswered', { headers: { 'X-Admin-Token': token } }));
+  },
+  async synonymsList(token: string): Promise<{ items: SynonymRow[] }> {
+    return handle(await fetch('/api/admin/synonyms', { headers: { 'X-Admin-Token': token } }));
+  },
+  async synonymAdd(row: { term: string; target: string }, token: string): Promise<SynonymRow> {
+    return handle(
+      await fetch('/api/admin/synonyms', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+        body: JSON.stringify(row),
+      }),
+    );
+  },
+  async synonymDelete(id: number, token: string): Promise<{ deleted: number }> {
+    return handle(
+      await fetch(`/api/admin/synonyms/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Token': token },
       }),
     );
   },
