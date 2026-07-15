@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { SearchResponse, Supplier } from '../api/types';
 import { useApp } from '../state/AppContext';
@@ -24,7 +24,7 @@ const FIELD_OPTS = [
 ];
 
 export function SearchView() {
-  const { showToast, openVariant } = useApp();
+  const { showToast, openVariant, searchQuery } = useApp();
   const [q, setQ] = useState('');
   const [match, setMatch] = useState('contains');
   const [field, setField] = useState('all');
@@ -35,9 +35,21 @@ export function SearchView() {
   const [openSuppliers, setOpenSuppliers] = useState<Set<string>>(new Set());
   const [maktSuppliers, setMaktSuppliers] = useState<Record<string, Supplier[]>>({});
   const [loadingSuppliers, setLoadingSuppliers] = useState<Set<string>>(new Set());
+  const lastInjected = useRef<string | null>(null);
 
-  async function search() {
-    if (!q.trim()) {
+  // שאילתה שהוזרקה מ-deep-link (למשל מהעוזר החכם) — ממלאת את שדה החיפוש ומריצה מיד.
+  useEffect(() => {
+    if (searchQuery && searchQuery !== lastInjected.current) {
+      lastInjected.current = searchQuery;
+      setQ(searchQuery);
+      search(searchQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  async function search(queryArg?: string) {
+    const term = (queryArg ?? q).trim();
+    if (!term) {
       showToast('הקלד ערך לחיפוש', 'error');
       return;
     }
@@ -46,7 +58,7 @@ export function SearchView() {
     setOpenSuppliers(new Set());
     setMaktSuppliers({});
     try {
-      const data = await api.searchItems({ q: q.trim(), match, field });
+      const data = await api.searchItems({ q: term, match, field });
       setRes(data);
       // הרחבת המק"ט הראשון אוטומטית
       setExpanded(new Set(data.groups?.slice(0, 1).map((g) => g.catalogNumber)));
@@ -130,7 +142,7 @@ export function SearchView() {
                 ))}
               </select>
             </div>
-            <button className="btn btn-primary" onClick={search} disabled={loading}>
+            <button className="btn btn-primary" onClick={() => search()} disabled={loading}>
               {loading ? <span className="spinner" /> : 'חפש'}
             </button>
             {res && res.count > 0 && (

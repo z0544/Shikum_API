@@ -47,6 +47,11 @@ export interface ChatResponse {
 /** קטגוריות ברירת מחדל להכוונה (רשת ביטחון + כפתורי פתיחה). */
 const SUGGESTED_CATEGORIES = ['כיסא גלגלים', 'טיפול פסיכולוגי', 'מכשיר שמיעה', 'עדשות'];
 
+/** בחירה אקראית מתוך מערך — לגיוון נוסח תשובות העוזר (מונע תחושת "בוט סטטי"). */
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 @Injectable()
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
@@ -545,15 +550,34 @@ export class SearchService {
     const total = res.total_makts;
     const shown = Math.min(res.results.length, 4);
     const countText =
-      total > shown ? `מצאתי ${total} מק"טים מתאימים — הנה ${shown} המובילים` : `הנה ${total} התוצאות`;
+      total > shown
+        ? pick([
+            `מצאתי ${total} מק"טים מתאימים — הנה ${shown} המובילים`,
+            `יש ${total} מק"טים תואמים, אלה ${shown} המובילים`,
+            `הנה ${shown} המובילים מתוך ${total} מק"טים שמצאתי`,
+          ])
+        : pick([
+            `הנה ${total} התוצאות`,
+            `מצאתי ${total} תוצאות מתאימות`,
+            `אלה ${total} התוצאות שמצאתי`,
+          ]);
+    // התוצאות ממוינות לפי מספר הספקים יורד — אם למובילה אין ספקים, לאף אחת אין,
+    // ואז לא מציעים "מי מספק?" / "מה הטלפון?" (אין למי להפנות).
+    const hasSuppliers = ((res.results[0]?.supplier_count as number) ?? 0) > 0;
+    const locationSuffix = res.user_location ? ` · ${res.user_location}` : '';
+    const prompt = hasSuppliers
+      ? pick([
+          'אפשר ללחוץ לפתיחה, או לשאול "מי מספק?" / "מה הטלפון?":',
+          'לחצו לפתיחה, או שאלו "מי מספק?" לרשימת הספקים המורשים:',
+          'אפשר לפתוח מק"ט, או לבדוק "מי מספק?" ו"מה הטלפון?":',
+        ])
+      : pick(['אפשר ללחוץ לפתיחה:', 'לחצו על מק"ט כדי לפתוח את הפרטים:']);
     return {
       intent: 'search',
       context: ctx,
-      reply: `${countText}${
-        res.user_location ? ` · ${res.user_location}` : ''
-      }. אפשר ללחוץ לפתיחה, או לשאול "מי מספק?" / "מה הטלפון?":`,
+      reply: `${countText}${locationSuffix}. ${prompt}`,
       results: res.results.slice(0, 4),
-      quickReplies: ['מי מספק?', 'מה הטלפון?', 'חיפוש חדש'],
+      quickReplies: hasSuppliers ? ['מי מספק?', 'מה הטלפון?', 'חיפוש חדש'] : ['חיפוש חדש'],
     };
   }
 
@@ -623,14 +647,19 @@ export class SearchService {
       }
       const city = ctx.location ? this.geo.normalizeCity(ctx.location) : null;
       const ranked = this.geo.rankSuppliers(city, suppliers as any);
-      const label = intent === 'contact' ? 'פרטי הקשר של הספקים המורשים' : 'הספקים המורשים';
-      return {
-        intent,
-        context: ctx,
-        reply: `${label} למק"ט ${makat} (${ranked.length}):`,
-        suppliers: ranked,
-        quickReplies: ['חיפוש חדש'],
-      };
+      const reply =
+        intent === 'contact'
+          ? pick([
+              `פרטי הקשר של הספקים המורשים למק"ט ${makat} (${ranked.length}):`,
+              `הנה פרטי הקשר לספקים המורשים של מק"ט ${makat} (${ranked.length}):`,
+              `מצאתי ${ranked.length} ספקים מורשים למק"ט ${makat} — אלה פרטי הקשר:`,
+            ])
+          : pick([
+              `הספקים המורשים למק"ט ${makat} (${ranked.length}):`,
+              `אלה הספקים המורשים למק"ט ${makat} (${ranked.length}):`,
+              `מצאתי ${ranked.length} ספקים מורשים למק"ט ${makat}:`,
+            ]);
+      return { intent, context: ctx, reply, suppliers: ranked, quickReplies: ['חיפוש חדש'] };
     }
 
     // כוונת חיפוש מוצר

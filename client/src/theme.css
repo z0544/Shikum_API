@@ -613,3 +613,26 @@ table.data tbody tr.nearest { background: #e4f6ee; }
 .chat-typing i:nth-child(2) { animation-delay: 0.2s; }
 .chat-typing i:nth-child(3) { animation-delay: 0.4s; }
 @keyframes chat-blink { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+
+/* --- צ'אט דינמי: כניסה מונפשת, מיקרו-קופי, וחיווי סטטוס חי --- */
+@keyframes chat-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.chat-msg { animation: chat-slide-up 0.2s ease both; }
+/* stagger — כרטיסים נכנסים בזה אחר זה (animationDelay מוזרק inline). */
+.chat-result { animation: chat-slide-up 0.2s ease both; }
+
+.chat-typing-msg { display: flex; align-items: center; gap: 8px; }
+.chat-typing-label { font-size: 12.5px; color: var(--ink); opacity: 0.6; }
+
+.chat-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38c172;
+  margin-inline-end: 6px;
+  vertical-align: middle;
+}
+.chat-status-dot.busy { background: #f5c451; animation: chat-blink 1s infinite; }

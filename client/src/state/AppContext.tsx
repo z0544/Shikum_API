@@ -19,15 +19,21 @@ interface Route {
   view: View;
   /** מזהה הווריאנט להצגה (רק כאשר view === 'variant'). */
   variantId: string | null;
+  /** שאילתת חיפוש נכנסת מ-deep-link (רק כאשר view === 'search'). */
+  searchQuery: string | null;
 }
 
 interface AppState {
   view: View;
   /** מזהה הווריאנט הפעיל בתצוגת הווריאנט הייעודית (deep-link). */
   variantId: string | null;
+  /** שאילתה שהוזרקה לעמוד החיפוש (למשל מהעוזר החכם). */
+  searchQuery: string | null;
   setView: (v: View) => void;
   /** מעבר לתצוגת וריאנט בודד ייעודית (מעדכן את ה-URL לשיתוף). */
   openVariant: (entityId: string) => void;
+  /** מעבר לעמוד החיפוש והרצת שאילתה נתונה (מק"ט/טקסט) — לשיתוף מהצ'אט. */
+  openSearch: (query: string) => void;
   adminToken: string;
   setAdminToken: (t: string) => void;
   toast: ToastState | null;
@@ -43,19 +49,27 @@ function parseHash(): Route {
   const raw = window.location.hash.replace(/^#\/?/, '');
   const [seg, ...rest] = raw.split('/');
   if (seg === 'variant') {
-    return { view: 'variant', variantId: rest.length ? decodeURIComponent(rest.join('/')) : null };
+    return {
+      view: 'variant',
+      variantId: rest.length ? decodeURIComponent(rest.join('/')) : null,
+      searchQuery: null,
+    };
   }
-  if (seg === 'admin') return { view: 'admin', variantId: null };
-  return { view: 'search', variantId: null };
+  if (seg === 'admin') return { view: 'admin', variantId: null, searchQuery: null };
+  return {
+    view: 'search',
+    variantId: null,
+    searchQuery: rest.length ? decodeURIComponent(rest.join('/')) : null,
+  };
 }
 
-/** בניית ה-hash מתוך view + מזהה וריאנט אופציונלי. */
-function hashFor(view: View, variantId?: string | null): string {
+/** בניית ה-hash מתוך view + ארגומנט אופציונלי (מזהה וריאנט / שאילתת חיפוש). */
+function hashFor(view: View, arg?: string | null): string {
   if (view === 'admin') return '#/admin';
   if (view === 'variant') {
-    return variantId ? `#/variant/${encodeURIComponent(variantId)}` : '#/variant';
+    return arg ? `#/variant/${encodeURIComponent(arg)}` : '#/variant';
   }
-  return '#/search';
+  return arg ? `#/search/${encodeURIComponent(arg)}` : '#/search';
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -82,6 +96,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.location.hash = hashFor('variant', entityId);
   }, []);
 
+  const openSearch = useCallback((query: string) => {
+    window.location.hash = hashFor('search', query);
+  }, []);
+
   const setAdminToken = useCallback((t: string) => {
     setAdminTokenState(t);
     localStorage.setItem(TOKEN_KEY, t);
@@ -98,8 +116,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         view: route.view,
         variantId: route.variantId,
+        searchQuery: route.searchQuery,
         setView,
         openVariant,
+        openSearch,
         adminToken,
         setAdminToken,
         toast,
