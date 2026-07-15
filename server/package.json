@@ -11,6 +11,9 @@
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push --skip-generate",
     "db:setup": "prisma generate && prisma db push --skip-generate",
+    "db:pg:start": "\"../.pg/pgsql/bin/pg_ctl.exe\" -D \"../.pg/data\" -l \"../.pg/pg.log\" -o \"-p 5544\" start",
+    "db:pg:stop": "\"../.pg/pgsql/bin/pg_ctl.exe\" -D \"../.pg/data\" stop",
+    "db:pg:status": "\"../.pg/pgsql/bin/pg_ctl.exe\" -D \"../.pg/data\" status",
     "etl": "ts-node -T src/etl/etl.cli.ts",
     "test": "jest",
     "test:watch": "jest --watch"

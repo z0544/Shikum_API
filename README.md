@@ -9,7 +9,7 @@
 ## ארכיטקטורה
 
 ```
-Backend  — NestJS (Controllers / Services / Repositories) + Prisma ORM + SQLite (Postgres-ready)
+Backend  — NestJS (Controllers / Services / Repositories) + Prisma ORM + PostgreSQL
 Frontend — React + Vite + TypeScript + Context API (RTL, עברית)
 ```
 
@@ -35,8 +35,9 @@ Frontend — React + Vite + TypeScript + Context API (RTL, עברית)
 # 1. התקנת תלויות (root + server + client)
 npm run install:all
 
-# 2. הקמת בסיס הנתונים (SQLite) — יצירת סכמה
-npm run db:setup
+# 2. הקמת בסיס הנתונים (PostgreSQL) — הפעלת האשכול המקומי + יצירת סכמה
+npm --prefix server run db:pg:start   # מפעיל PostgreSQL נייד מקומי (פורט 5544)
+npm run db:setup                      # prisma generate + db push
 
 # 3. טעינת הנתונים מקובצי ה-XLSX (server/data)
 npm run etl
@@ -54,10 +55,20 @@ npm start                # http://localhost:3000  (API + UI יחד)
 הגדרות ב-`server/.env` (ראה `server/.env.example`): `PORT`, `CORS_ORIGINS`, `ADMIN_TOKEN`
 (אסימון ניהול — ברירת מחדל בפיתוח `shikum-admin-dev`; ריק = נקודות ניהול מושבתות), `DATABASE_URL`.
 
-### מעבר ל-PostgreSQL
-1. ב-`server/prisma/schema.prisma` שנה `provider = "postgresql"`.
-2. עדכן `DATABASE_URL` ל-connection string.
-3. הרץ `npm run db:setup && npm run etl`. אין שינוי בקוד היישום.
+### בסיס הנתונים — PostgreSQL
+המערכת עובדת מול **PostgreSQL**. לפיתוח מקומי מסופק אשכול PostgreSQL 17 **נייד** (ללא הרשאות מנהל,
+ללא Docker) תחת `.pg/`, המנוהל דרך סקריפטים:
+
+```bash
+npm --prefix server run db:pg:start    # הפעלה (פורט 5544)
+npm --prefix server run db:pg:status   # בדיקת מצב
+npm --prefix server run db:pg:stop      # עצירה
+```
+
+- `DATABASE_URL` מוגדר ב-`server/.env` (ברירת מחדל: `postgresql://postgres:postgres@localhost:5544/shikum`).
+  פורט 5544 נבחר משום שפורט 5432 שמור/חסום במכונה זו.
+- מעבר לשרת PostgreSQL אחר (מקומי/ענן): עדכן את `DATABASE_URL` בלבד — אין שינוי בקוד היישום.
+- הערה: האשכול הנייד אינו שירות Windows ואינו עולה אוטומטית עם המחשב — הרץ `db:pg:start` לאחר אתחול.
 
 ## נקודות קצה (API)
 
@@ -97,6 +108,6 @@ npm test        # Jest — entity-id, geo, column-mapping
 ## אריזה למסירה
 
 ```bash
-tar -czvf shikum_api.tar.gz --exclude=node_modules --exclude=_source_kms \
+tar -czvf shikum_api.tar.gz --exclude=node_modules --exclude=_source_kms --exclude=.pg \
   --exclude=.git --exclude='server/prisma/*.db' --exclude=client/dist --exclude=server/dist .
 ```

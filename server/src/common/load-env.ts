@@ -30,6 +30,7 @@ export function loadEnv(): void {
     /* מתעלמים — נשען על ברירות מחדל */
   }
   if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'file:./dev.db';
+    process.env.DATABASE_URL =
+      'postgresql://postgres:postgres@localhost:5544/shikum?schema=public';
   }
 }

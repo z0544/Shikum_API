@@ -1,16 +1,15 @@
-// SHIKUM_API — Prisma schema (SQLite; Postgres-ready).
+// SHIKUM_API — Prisma schema (PostgreSQL).
 // DB columns use clean English names; Hebrew XLSX headers are mapped during ETL,
 // and Hebrew labels are applied only in the UI / Excel exports.
 //
-// To switch to PostgreSQL: change provider to "postgresql" and point DATABASE_URL
-// at your server — the models below are portable as-is.
+// DATABASE_URL points at PostgreSQL (see server/.env). A local portable cluster
+// can be started with `npm run db:pg:start`.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  //provider = "sqlite"
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
