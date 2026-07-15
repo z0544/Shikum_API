@@ -16,8 +16,9 @@ services:
     plan: free
     region: frankfurt
     healthCheckPath: /health
-    # build + create schema + seed data on the managed DB (DATABASE_URL available at build time)
-    buildCommand: npm install && npm run build && npm --prefix server run db:deploy
+    buildCommand: npm install && npm run build
+    # On start: prestart pushes the Prisma schema, and the app auto-seeds the DB
+    # from server/data/*.xlsx on first boot (when empty). Fully automatic.
     startCommand: npm run start
     envVars:
       - key: NODE_VERSION
@@ -30,6 +31,6 @@ services:
         value: "3000"
       - key: CORS_ORIGINS
         value: "*"
-      # Admin token for protected endpoints — set your own value in the dashboard.
+      # Admin token for protected endpoints — generated automatically.
       - key: ADMIN_TOKEN
-        sync: false
+        generateValue: true

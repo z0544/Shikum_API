@@ -10,6 +10,8 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { ConfigMapService } from './config-map/config-map.service';
+import { PrismaService } from './prisma/prisma.service';
+import { EtlService } from './etl/etl.service';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -34,6 +36,19 @@ async function bootstrap() {
     await app.get(ConfigMapService).seedDefaults();
   } catch (e) {
     logger.warn(`דילוג על זריעת config-map (ייתכן שה-DB לא הוקם): ${(e as Error).message}`);
+  }
+
+  // טעינת נתונים אוטומטית בעלייה ראשונה — אם ה-DB ריק, מריץ ETL מקובצי server/data.
+  // כך פריסה חדשה (למשל Render) מתאכלסת לבד ללא צעד ידני.
+  try {
+    const itemCount = await app.get(PrismaService).catalogItem.count();
+    if (itemCount === 0) {
+      logger.log('ה-DB ריק — מריץ טעינת נתונים ראשונית (ETL)...');
+      const stats = await app.get(EtlService).processData();
+      logger.log(`טעינה ראשונית הושלמה: ${JSON.stringify(stats)}`);
+    }
+  } catch (e) {
+    logger.warn(`דילוג על טעינת נתונים אוטומטית: ${(e as Error).message}`);
   }
 
   // הגשת ה-Frontend הבנוי (אם קיים) — client/dist
