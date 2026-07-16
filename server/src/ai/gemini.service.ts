@@ -54,4 +54,69 @@ export class GeminiService {
       return null;
     }
   }
+
+  /**
+   * מייצר פלט JSON מובנה. מחזיר אובייקט מפוענח או null בכישלון.
+   */
+  async generateJson<T = Record<string, unknown>>(
+    systemInstruction: string,
+    prompt: string,
+  ): Promise<T | null> {
+    const client = this.getClient();
+    if (!client) return null;
+    try {
+      const res = await client.models.generateContent({
+        model: this.model,
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+          maxOutputTokens: 500,
+          responseMimeType: 'application/json',
+        },
+      });
+      const text = res.text?.trim();
+      if (!text) return null;
+      return JSON.parse(text) as T;
+    } catch (e) {
+      this.logger.warn(`קריאת Gemini (JSON) נכשלה: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * מנתח מסמך (PDF/תמונה) בעזרת Gemini ומחזיר JSON מובנה.
+   * data — תוכן הקובץ בקידוד base64; mimeType — סוג הקובץ.
+   */
+  async analyzeDocumentJson<T = Record<string, unknown>>(
+    systemInstruction: string,
+    prompt: string,
+    file: { mimeType: string; data: string },
+  ): Promise<T | null> {
+    const client = this.getClient();
+    if (!client) return null;
+    try {
+      const res = await client.models.generateContent({
+        model: this.model,
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }, { inlineData: { mimeType: file.mimeType, data: file.data } }],
+          },
+        ],
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+          maxOutputTokens: 700,
+          responseMimeType: 'application/json',
+        },
+      });
+      const text = res.text?.trim();
+      if (!text) return null;
+      return JSON.parse(text) as T;
+    } catch (e) {
+      this.logger.warn(`ניתוח מסמך ב-Gemini נכשל: ${(e as Error).message}`);
+      return null;
+    }
+  }
 }

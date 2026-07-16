@@ -14,7 +14,7 @@ interface Msg {
 type Intent = 'search' | 'suppliers' | 'contact';
 
 const GREETING =
-  'שלום! 👋 אני העוזר של מערכת השיקום. אענה רק על סמך נתוני המערכת — מק"טים, שירותים וספקים מורשים.\nמה המוצר או השירות שאתם מחפשים? אפשר גם לשאול "מי מספק?" או "מה הטלפון?".';
+  'שלום! 👋 אני העוזר החכם של מערכת השיקום. ספרו לי מה הבעיה או הצורך ואשאל שאלות כדי להבין במה לעזור.\nאם יש לכם מסמך הפניה — אפשר לצרף אותו (📎) ואזהה ממנו איזה שירות דרוש.';
 
 const START_QUICK = ['כיסא גלגלים', 'טיפול פסיכולוגי', 'מכשיר שמיעה', 'עדשות מולטיפוקל'];
 
@@ -90,6 +90,7 @@ export function ChatBot() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const suggestTimer = useRef<number>();
   const suggestSeq = useRef(0);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const nextId = () => ++idRef.current;
   const pushBot = (m: Omit<Msg, 'id' | 'role'>) =>
@@ -143,6 +144,29 @@ export function ChatBot() {
       setQuick(res.quickReplies || []);
     } catch (e) {
       pushBot({ text: e instanceof ApiError ? e.message : 'אירעה שגיאה. נסו שוב.' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /** צירוף מסמך הפניה — Gemini מזהה את השירות הנדרש מהמסמך ומחפש. */
+  async function sendDocument(file: File) {
+    if (loading) return;
+    window.clearTimeout(suggestTimer.current);
+    suggestSeq.current++;
+    setInput('');
+    setSuggests([]);
+    setQuick([]);
+    setPendingIntent('search');
+    pushUser(`📎 ${file.name}`);
+    setLoading(true);
+    try {
+      const res = await api.chatDocument(file, ctx);
+      setCtx(res.context || {});
+      pushBot({ text: res.reply, results: res.results, suppliers: res.suppliers });
+      setQuick(res.quickReplies || []);
+    } catch (e) {
+      pushBot({ text: e instanceof ApiError ? e.message : 'לא הצלחתי לנתח את המסמך. נסו שוב.' });
     } finally {
       setLoading(false);
     }
@@ -382,10 +406,30 @@ export function ChatBot() {
 
           <div className="chat-foot">
             <input
+              type="file"
+              ref={fileRef}
+              accept="application/pdf,image/png,image/jpeg,image/webp"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) sendDocument(f);
+                e.currentTarget.value = '';
+              }}
+            />
+            <button
+              className="chat-attach"
+              onClick={() => fileRef.current?.click()}
+              disabled={loading}
+              title="צרף מסמך הפניה (PDF/תמונה)"
+              aria-label="צרף מסמך הפניה"
+            >
+              📎
+            </button>
+            <input
               value={input}
               onChange={(e) => onInputChange(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send(input)}
-              placeholder="כתבו הודעה…"
+              placeholder="כתבו הודעה או צרפו מסמך…"
               aria-label="הודעה"
             />
             <button className="btn btn-primary btn-sm" onClick={() => send(input)} disabled={loading}>

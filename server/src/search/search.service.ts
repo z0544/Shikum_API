@@ -594,13 +594,117 @@ export class SearchService {
    * הכרטיסים/הספקים/הכפתורים נשמרים כפי שהם; רק נוסח התשובה הופך לחכם יותר.
    */
   async chat(message: string, ctxIn: ChatContext = {}): Promise<ChatResponse> {
-    const base = await this.chatLocal(message, ctxIn);
+    const ctx: ChatContext = { ...ctxIn };
+    let query = message;
+
+    // שלב הבנה (רק כש-AI פעיל ולא באמצע המתנה למיקום):
+    // אם ההודעה מעורפלת / תיאור בעיה — נשאל שאלת הבהרה לפני שמחפשים מק"טים.
+    if (this.gemini.isEnabled() && !ctx.awaitingLocation) {
+      try {
+        const u = await this.understand(message);
+        if (u?.action === 'clarify' && u.question) {
+          return {
+            intent: 'search',
+            context: ctx,
+            reply: u.question,
+            quickReplies: u.suggestions?.length ? u.suggestions.slice(0, 4) : SUGGESTED_CATEGORIES,
+          };
+        }
+        if (u?.action === 'search' && u.query && this.classifyIntent(message) === 'search') {
+          query = u.query;
+        }
+      } catch (e) {
+        this.logger.warn(`שלב ההבנה נכשל — ממשיכים לחיפוש רגיל: ${(e as Error).message}`);
+      }
+    }
+
+    const base = await this.chatLocal(query, ctx);
     try {
       const aiReply = await this.aiReply(message, base);
       if (aiReply) base.reply = aiReply;
     } catch (e) {
       this.logger.warn(`שכבת AI נכשלה — משתמש בתשובה המקומית: ${(e as Error).message}`);
     }
+    return base;
+  }
+
+  /**
+   * שכבת הבנה מבוססת Gemini: מחליטה אם ההודעה היא בקשה ברורה למוצר/שירות (search)
+   * או תיאור בעיה/הודעה מעורפלת שדורשת שאלת הבהרה (clarify).
+   */
+  private async understand(
+    message: string,
+  ): Promise<{ action: 'clarify' | 'search'; question?: string; query?: string; suggestions?: string[] } | null> {
+    const systemInstruction = [
+      'אתה שכבת ההבנה של עוזר חכם לאגף השיקום, שמסייע למצוא מוצרי ושירותי שיקום (ניידות, שמיעה, ראייה, טיפולים, אביזרים ועוד).',
+      'החלט אם הודעת המשתמש היא בקשה ברורה למוצר/שירות/מק"ט, או שהיא כללית/מעורפלת/תיאור בעיה שדורש שאלת הבהרה קצרה לפני חיפוש.',
+      'אם המשתמש מתאר בעיה או מצב בלי לציין מוצר/שירות (למשל "יש לי בעיה", "אני צריך עזרה", "כואב לי הגב", "אמא שלי מתקשה ללכת") — action="clarify".',
+      'במקרה clarify נסח שאלה קצרה, אמפתית ובעברית שתעזור להבין את הצורך, וספק 2-4 הצעות קצרות ב-suggestions (כפתורי בחירה).',
+      'אם ההודעה כוללת מוצר/שירות/מק"ט/קוד ברור (למשל "כיסא גלגלים", "מכשיר שמיעה", "מי מספק עדשות") — action="search" ו-query = ביטוי חיפוש תמציתי בעברית.',
+      'החזר JSON בלבד: {"action":"clarify"|"search","question":string,"query":string,"suggestions":string[]}',
+    ].join(' ');
+    return this.gemini.generateJson(systemInstruction, `הודעת המשתמש: "${message}"`);
+  }
+
+  /**
+   * שיחה על בסיס מסמך שצורף (הפניה / מרשם): Gemini מנתח את המסמך, מחלץ את
+   * השירות/המוצר הנדרש, ואז מבוצע חיפוש רגיל ומוחזרת תשובה מנוסחת + כרטיסים.
+   */
+  async chatFromDocument(
+    file: { buffer: Buffer; mimetype: string; originalname?: string },
+    ctxIn: ChatContext = {},
+  ): Promise<ChatResponse> {
+    const ctx: ChatContext = { ...ctxIn };
+    if (!this.gemini.isEnabled()) {
+      return {
+        intent: 'search',
+        context: ctx,
+        reply: 'ניתוח מסמכים דורש הפעלת ה-AI (חסר מפתח Gemini). אפשר לתאר את הצורך במילים ואחפש עבורך.',
+        quickReplies: SUGGESTED_CATEGORIES,
+      };
+    }
+
+    const systemInstruction = [
+      'אתה מנתח מסמכי הפניה/מרשמים רפואיים בתחום השיקום.',
+      'קרא את המסמך וחלץ מהו המוצר או השירות השיקומי שהאדם זקוק לו.',
+      'summary = משפט תמציתי בעברית שמסביר מה עולה מהמסמך. query = ביטוי חיפוש קצר בעברית למוצר/שירות. found = האם זוהה צורך ברור.',
+      'הסתמך אך ורק על תוכן המסמך. אל תמציא. החזר JSON בלבד: {"found":boolean,"query":string,"summary":string}',
+    ].join(' ');
+    const prompt =
+      'לפניך מסמך הפניה בתחום השיקום. חלץ את השירות/המוצר הנדרש והחזר JSON כפי שהוגדר.';
+
+    const analysis = await this.gemini.analyzeDocumentJson<{
+      found?: boolean;
+      query?: string;
+      summary?: string;
+    }>(systemInstruction, prompt, {
+      mimeType: file.mimetype,
+      data: file.buffer.toString('base64'),
+    });
+
+    if (!analysis || !analysis.query || analysis.found === false) {
+      return {
+        intent: 'search',
+        context: ctx,
+        reply:
+          analysis?.summary?.trim() ||
+          'לא הצלחתי לזהות מהמסמך איזה שירות נדרש. אפשר לתאר את הצורך במילים ואחפש עבורך.',
+        quickReplies: SUGGESTED_CATEGORIES,
+      };
+    }
+
+    const base = await this.chatLocal(analysis.query, ctx);
+    try {
+      const aiReply = await this.aiReply(
+        `על סמך מסמך הפניה. סיכום המסמך: ${analysis.summary ?? ''}. הצורך שזוהה: ${analysis.query}`,
+        base,
+      );
+      if (aiReply) base.reply = aiReply;
+    } catch (e) {
+      this.logger.warn(`שכבת AI נכשלה בניתוח מסמך: ${(e as Error).message}`);
+    }
+    const prefix = analysis.summary?.trim() ? `מהמסמך הבנתי: ${analysis.summary.trim()}\n\n` : '';
+    base.reply = prefix + base.reply;
     return base;
   }
 

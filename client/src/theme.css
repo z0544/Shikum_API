@@ -599,7 +599,22 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   border-top: 1px solid var(--line);
   background: #fff;
 }
-.chat-foot input { flex: 1; }
+.chat-foot input[type='text'],
+.chat-foot > input:not([type]) { flex: 1; }
+.chat-attach {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+.chat-attach:hover:not(:disabled) { background: var(--bg, #f5f7fa); border-color: var(--brand-2); }
+.chat-attach:disabled { opacity: 0.5; cursor: default; }
 
 .chat-typing { display: inline-flex; gap: 4px; padding: 2px 0; }
 .chat-typing i {

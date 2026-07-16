@@ -84,6 +84,13 @@ export const api = {
     );
   },
 
+  async chatDocument(file: File, context: ChatContext): Promise<ChatResponse> {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('context', JSON.stringify(context));
+    return handle<ChatResponse>(await fetch('/api/ai/chat/document', { method: 'POST', body: fd }));
+  },
+
   async suggest(q: string): Promise<string[]> {
     try {
       const res = await fetch(`/api/ai/suggest?q=${encodeURIComponent(q)}`);

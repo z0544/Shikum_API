@@ -1,6 +1,20 @@
-import { Body, Controller, DefaultValuePipe, Get, HttpCode, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  DefaultValuePipe,
+  Get,
+  HttpCode,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ChatContext, SearchService } from './search.service';
+
+const DOC_ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
 
 class AiSearchDto {
   @IsString()
@@ -47,6 +61,29 @@ export class SearchController {
   @HttpCode(200)
   async chat(@Body() body: ChatDto) {
     return this.search.chat(body.message.trim(), body.context || {});
+  }
+
+  /** ניתוח מסמך הפניה שצורף (PDF/תמונה) — Gemini מזהה את השירות הנדרש ומחפש. */
+  @Post('api/ai/chat/document')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024 } }))
+  async chatDocument(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('context') contextRaw?: string,
+  ) {
+    if (!file) throw new BadRequestException('לא צורף קובץ');
+    if (!DOC_ALLOWED_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException('פורמט לא נתמך — צרף PDF או תמונה (PNG/JPG).');
+    }
+    let context: ChatContext = {};
+    if (contextRaw) {
+      try {
+        context = JSON.parse(contextRaw);
+      } catch {
+        /* מתעלמים מהקשר לא תקין */
+      }
+    }
+    return this.search.chatFromDocument(file, context);
   }
 
   @Get('api/ai/suggest')
