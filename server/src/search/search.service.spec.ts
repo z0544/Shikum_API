@@ -36,7 +36,7 @@ function cannedSearch(over: Record<string, unknown> = {}) {
 
 describe('SearchService — פירוק וסיווג (טהור)', () => {
   const geo = new GeoService();
-  const service = new SearchService({} as any, geo, {} as any);
+  const service = new SearchService({} as any, geo, {} as any, { isEnabled: () => false } as any);
   const s = service as any;
 
   it('classifyIntent — קשר / ספקים / חיפוש', () => {
@@ -70,7 +70,7 @@ describe('SearchService — מכונת המצבים של chat()', () => {
   beforeEach(() => {
     geo = new GeoService();
     catalog = { getSuppliersForMakt: jest.fn().mockResolvedValue([]) };
-    service = new SearchService({} as any, geo, catalog as any);
+    service = new SearchService({} as any, geo, catalog as any, { isEnabled: () => false } as any);
     s = service as any;
     jest.spyOn(geo, 'rankSuppliers').mockImplementation((_c: any, list: any) => list);
   });

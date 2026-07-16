@@ -26,10 +26,14 @@ export class SearchController {
 
   @Get('api/ai/status')
   status() {
+    const aiEnabled = this.search.isAiEnabled();
     return {
-      engine: 'local',
-      cost: 'free',
-      hint: 'חיפוש חכם מקומי בעברית — ללא OpenAI וללא עלות',
+      engine: aiEnabled ? 'gemini' : 'local',
+      ai_enabled: aiEnabled,
+      cost: aiEnabled ? 'gemini-api' : 'free',
+      hint: aiEnabled
+        ? 'עוזר חכם מבוסס Gemini — תשובות מעוגנות בנתוני המערכת (RAG)'
+        : 'חיפוש חכם מקומי בעברית — ללא AI וללא עלות',
     };
   }
 

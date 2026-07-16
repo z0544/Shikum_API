@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeoService } from '../geo/geo.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { editDistance, fuzzyThreshold, normalizeHebrew } from '../common/hebrew';
+import { GeminiService } from '../ai/gemini.service';
 import { SYNONYMS } from './synonyms';
 
 // מילות עזר בעברית — לא משמשות לחיפוש
@@ -60,7 +61,13 @@ export class SearchService {
     private readonly prisma: PrismaService,
     private readonly geo: GeoService,
     private readonly catalog: CatalogService,
+    private readonly gemini: GeminiService,
   ) {}
+
+  /** האם שכבת ה-AI (Gemini) פעילה (קיים מפתח API). */
+  isAiEnabled(): boolean {
+    return this.gemini.isEnabled();
+  }
 
   private tokenize(text: string): string[] {
     const words = text.match(/[א-ת0-9][א-ת0-9\-]{1,}/g) || [];
@@ -582,10 +589,73 @@ export class SearchService {
   }
 
   /**
-   * שכבת השיחה של העוזר החכם: מפרקת את המשפט לכוונה + ישות,
-   * שומרת זיכרון קצר (המק"ט האחרון), ומחזירה תשובה מובנית.
+   * נקודת הכניסה לשיחה: קודם שולפת נתונים מעוגנים (chatLocal — כוונה + מק"טים + ספקים),
+   * ואז — אם Gemini פעיל — מנסחת תשובה טבעית המבוססת אך ורק על הנתונים שנשלפו (RAG).
+   * הכרטיסים/הספקים/הכפתורים נשמרים כפי שהם; רק נוסח התשובה הופך לחכם יותר.
    */
   async chat(message: string, ctxIn: ChatContext = {}): Promise<ChatResponse> {
+    const base = await this.chatLocal(message, ctxIn);
+    try {
+      const aiReply = await this.aiReply(message, base);
+      if (aiReply) base.reply = aiReply;
+    } catch (e) {
+      this.logger.warn(`שכבת AI נכשלה — משתמש בתשובה המקומית: ${(e as Error).message}`);
+    }
+    return base;
+  }
+
+  /**
+   * מנסח תשובה בעזרת Gemini על סמך הנתונים שנשלפו בלבד (grounding).
+   * מחזיר null אם ה-AI כבוי או נכשל — ואז נשמרת התשובה המקומית.
+   */
+  private async aiReply(userMessage: string, base: ChatResponse): Promise<string | null> {
+    if (!this.gemini.isEnabled()) return null;
+
+    const results = (base.results ?? []).slice(0, 5).map((r) => ({
+      makat: r.catalogNumber,
+      description: r.description,
+      supplier_count: r.supplier_count,
+      nearest_supplier: (r.nearest_supplier as { name?: string } | null)?.name ?? null,
+    }));
+    const suppliers = (base.suppliers ?? []).slice(0, 6).map((s) => ({
+      name: (s as any).name ?? null,
+      phone: (s as any).mobile || (s as any).workPhone || (s as any).landline || null,
+      city: (s as any).city ?? null,
+      profession: (s as any).profession ?? null,
+      proximity: (s as any).proximity_label ?? null,
+    }));
+
+    const data = { intent: base.intent, results, suppliers };
+    const hasData = results.length > 0 || suppliers.length > 0;
+
+    const systemInstruction = [
+      'אתה העוזר החכם של מערכת השיקום של אגף השיקום.',
+      'ענה בעברית, בטון ידידותי, מקצועי ותמציתי (2-4 משפטים).',
+      'הסתמך אך ורק על הנתונים שסופקו לך (JSON). אל תמציא מק"טים, ספקים, טלפונים או עובדות שאינן בנתונים.',
+      'אל תמציא מחירים או זמינות. אם אין נתונים, אמור זאת בכנות והצע לנסח מחדש או לבחור קטגוריה.',
+      'אל תחזור על רשימת התוצאות באופן מלא — הן מוצגות בכרטיסים נפרדים. סכם והכוון את המשתמש.',
+      'אל תשתמש ב-Markdown, בכוכביות או בטבלאות — טקסט רגיל בלבד.',
+    ].join(' ');
+
+    const prompt = [
+      `שאלת המשתמש: "${userMessage}"`,
+      '',
+      'נתוני המערכת שנשלפו (הבסיס היחיד לתשובתך):',
+      JSON.stringify(data, null, 2),
+      '',
+      hasData
+        ? 'נסח תשובה קצרה שמסבירה מה נמצא ומכוונת את המשתמש להמשך (למשל לפתוח מק"ט, לבקש ספקים או פרטי קשר).'
+        : 'לא נמצאו נתונים מתאימים — הסבר זאת בעדינות והצע לנסח מחדש או לבחור קטגוריה.',
+    ].join('\n');
+
+    return this.gemini.generate(systemInstruction, prompt);
+  }
+
+  /**
+   * שכבת השיחה המקומית (ללא LLM): מפרקת את המשפט לכוונה + ישות,
+   * שומרת זיכרון קצר (המק"ט האחרון), ומחזירה תשובה מובנית + נתונים מעוגנים.
+   */
+  async chatLocal(message: string, ctxIn: ChatContext = {}): Promise<ChatResponse> {
     const text = (message || '').trim();
     const ctx: ChatContext = { ...ctxIn };
 

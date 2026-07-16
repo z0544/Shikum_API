@@ -17,12 +17,13 @@ export class HealthController {
     } catch {
       dbOk = false;
     }
+    const aiEnabled = !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
     return {
       status: 'ok',
       version: API_VERSION,
       database_ready: dbOk,
       item_count: itemCount,
-      smart_search: 'local',
+      smart_search: aiEnabled ? 'gemini' : 'local',
     };
   }
 }

@@ -34,3 +34,6 @@ services:
       # Admin token for protected endpoints — generated automatically.
       - key: ADMIN_TOKEN
         generateValue: true
+      # Gemini API key for the AI chat assistant — set your key in the dashboard.
+      - key: GEMINI_API_KEY
+        sync: false
