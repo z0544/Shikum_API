@@ -92,9 +92,9 @@ export class GeminiService {
     systemInstruction: string,
     prompt: string,
     file: { mimeType: string; data: string },
-  ): Promise<T | null> {
+  ): Promise<{ data: T | null; error?: string }> {
     const client = this.getClient();
-    if (!client) return null;
+    if (!client) return { data: null, error: 'AI לא מופעל (חסר מפתח)' };
     try {
       const res = await client.models.generateContent({
         model: this.model,
@@ -112,11 +112,12 @@ export class GeminiService {
         },
       });
       const text = res.text?.trim();
-      if (!text) return null;
-      return JSON.parse(text) as T;
+      if (!text) return { data: null, error: 'תשובה ריקה מהמודל' };
+      return { data: JSON.parse(text) as T };
     } catch (e) {
-      this.logger.warn(`ניתוח מסמך ב-Gemini נכשל: ${(e as Error).message}`);
-      return null;
+      const msg = (e as Error).message || String(e);
+      this.logger.warn(`ניתוח מסמך ב-Gemini נכשל (model=${this.model}): ${msg}`);
+      return { data: null, error: msg };
     }
   }
 }

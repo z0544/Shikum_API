@@ -731,7 +731,7 @@ export class SearchService {
     const prompt =
       'לפניך מסמך הפניה בתחום השיקום. חלץ את השירות/המוצר הנדרש והחזר JSON כפי שהוגדר.';
 
-    const analysis = await this.gemini.analyzeDocumentJson<{
+    const { data: analysis, error } = await this.gemini.analyzeDocumentJson<{
       found?: boolean;
       query?: string;
       summary?: string;
@@ -739,6 +739,19 @@ export class SearchService {
       mimeType: file.mimetype,
       data: file.buffer.toString('base64'),
     });
+
+    // כשל בקריאת ה-AI עצמה (שונה מ"זוהה אך לא נמצא צורך") — מציגים את הסיבה לאבחון.
+    if (error) {
+      this.logger.warn(
+        `chatFromDocument: כשל AI (${file.mimetype}, ${file.buffer.length} bytes): ${error}`,
+      );
+      return {
+        intent: 'search',
+        context: ctx,
+        reply: `לא הצלחתי לנתח את המסמך מול ה-AI. סיבה: ${error}\nאפשר לנסות שוב, או לתאר את הצורך במילים.`,
+        quickReplies: SUGGESTED_CATEGORIES,
+      };
+    }
 
     if (!analysis || !analysis.query || analysis.found === false) {
       return {
