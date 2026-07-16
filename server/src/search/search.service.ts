@@ -27,13 +27,28 @@ export interface ParsedQuery {
   parser: string;
 }
 
+/** תור שיחה בודד לזיכרון קצר. */
+export interface ChatTurn {
+  role: 'user' | 'bot';
+  text: string;
+}
+
 /** זיכרון שיחה קצר (נשמר בצד הלקוח ומועבר הלוך-ושוב). */
 export interface ChatContext {
   makat?: string | null;
   product?: string | null;
   awaitingLocation?: boolean;
   location?: string | null;
+  /** היסטוריית השיחה האחרונה (מוגבלת) — לזיכרון הקשר בין תורות. */
+  history?: ChatTurn[];
+  /** מונה שאלות הבהרה רצופות — למניעת לולאת הבהרות. */
+  clarifyCount?: number;
 }
+
+/** מספר התורות המרבי שנשמר בהיסטוריה. */
+const MAX_HISTORY = 10;
+/** מספר שאלות ההבהרה הרצופות המרבי לפני שעוברים לחיפוש בכל מקרה. */
+const MAX_CLARIFY = 2;
 
 export interface ChatResponse {
   intent: 'search' | 'suppliers' | 'contact';
@@ -595,14 +610,20 @@ export class SearchService {
    */
   async chat(message: string, ctxIn: ChatContext = {}): Promise<ChatResponse> {
     const ctx: ChatContext = { ...ctxIn };
+    const history: ChatTurn[] = Array.isArray(ctx.history) ? [...ctx.history] : [];
     let query = message;
 
     // שלב הבנה (רק כש-AI פעיל ולא באמצע המתנה למיקום):
     // אם ההודעה מעורפלת / תיאור בעיה — נשאל שאלת הבהרה לפני שמחפשים מק"טים.
+    // עם זיכרון שיחה: Gemini מקבל את ההיסטוריה כדי לא לשאול שוב על מה שכבר נאמר.
     if (this.gemini.isEnabled() && !ctx.awaitingLocation) {
       try {
-        const u = await this.understand(message);
-        if (u?.action === 'clarify' && u.question) {
+        const clarifyCount = ctx.clarifyCount ?? 0;
+        const u = await this.understand(message, history);
+        // ממשיכים לשאול הבהרה רק אם עדיין לא הצטבר מספיק מידע ולא חצינו את התקרה.
+        if (u?.action === 'clarify' && u.question && clarifyCount < MAX_CLARIFY) {
+          ctx.clarifyCount = clarifyCount + 1;
+          ctx.history = this.appendHistory(history, message, u.question);
           return {
             intent: 'search',
             context: ctx,
@@ -610,40 +631,77 @@ export class SearchService {
             quickReplies: u.suggestions?.length ? u.suggestions.slice(0, 4) : SUGGESTED_CATEGORIES,
           };
         }
-        if (u?.action === 'search' && u.query && this.classifyIntent(message) === 'search') {
-          query = u.query;
+        // עוברים לחיפוש: מעדיפים את ה-query שגזר Gemini (מגלם את כל השיחה),
+        // ואם אין — מסנתזים מכל מה שהמשתמש אמר עד כה.
+        if (u?.query && u.query.trim()) {
+          query = u.query.trim();
+        } else if (clarifyCount >= MAX_CLARIFY) {
+          const said = history.filter((h) => h.role === 'user').map((h) => h.text);
+          query = [...said, message].join(' ').trim();
         }
       } catch (e) {
         this.logger.warn(`שלב ההבנה נכשל — ממשיכים לחיפוש רגיל: ${(e as Error).message}`);
       }
     }
 
+    ctx.clarifyCount = 0;
     const base = await this.chatLocal(query, ctx);
     try {
-      const aiReply = await this.aiReply(message, base);
+      const aiReply = await this.aiReply(message, base, history);
       if (aiReply) base.reply = aiReply;
     } catch (e) {
       this.logger.warn(`שכבת AI נכשלה — משתמש בתשובה המקומית: ${(e as Error).message}`);
     }
+    // שמירת ההיסטוריה המעודכנת בהקשר המוחזר.
+    base.context = base.context || ctx;
+    base.context.history = this.appendHistory(history, message, base.reply);
+    base.context.clarifyCount = 0;
     return base;
+  }
+
+  /** מוסיף תור משתמש+בוט להיסטוריה ומגביל את אורכה. */
+  private appendHistory(history: ChatTurn[], userText: string, botText: string): ChatTurn[] {
+    const next: ChatTurn[] = [
+      ...history,
+      { role: 'user', text: userText },
+      { role: 'bot', text: botText },
+    ];
+    return next.slice(-MAX_HISTORY);
+  }
+
+  /** ממיר היסטוריה לטקסט קריא ל-prompt. */
+  private historyText(history: ChatTurn[]): string {
+    if (!history.length) return '(אין היסטוריה קודמת)';
+    return history
+      .slice(-MAX_HISTORY)
+      .map((h) => `${h.role === 'user' ? 'משתמש' : 'עוזר'}: ${h.text}`)
+      .join('\n');
   }
 
   /**
    * שכבת הבנה מבוססת Gemini: מחליטה אם ההודעה היא בקשה ברורה למוצר/שירות (search)
-   * או תיאור בעיה/הודעה מעורפלת שדורשת שאלת הבהרה (clarify).
+   * או תיאור בעיה/הודעה מעורפלת שדורשת שאלת הבהרה (clarify) — תוך התחשבות בהיסטוריית השיחה.
    */
   private async understand(
     message: string,
+    history: ChatTurn[] = [],
   ): Promise<{ action: 'clarify' | 'search'; question?: string; query?: string; suggestions?: string[] } | null> {
     const systemInstruction = [
       'אתה שכבת ההבנה של עוזר חכם לאגף השיקום, שמסייע למצוא מוצרי ושירותי שיקום (ניידות, שמיעה, ראייה, טיפולים, אביזרים ועוד).',
-      'החלט אם הודעת המשתמש היא בקשה ברורה למוצר/שירות/מק"ט, או שהיא כללית/מעורפלת/תיאור בעיה שדורש שאלת הבהרה קצרה לפני חיפוש.',
-      'אם המשתמש מתאר בעיה או מצב בלי לציין מוצר/שירות (למשל "יש לי בעיה", "אני צריך עזרה", "כואב לי הגב", "אמא שלי מתקשה ללכת") — action="clarify".',
-      'במקרה clarify נסח שאלה קצרה, אמפתית ובעברית שתעזור להבין את הצורך, וספק 2-4 הצעות קצרות ב-suggestions (כפתורי בחירה).',
-      'אם ההודעה כוללת מוצר/שירות/מק"ט/קוד ברור (למשל "כיסא גלגלים", "מכשיר שמיעה", "מי מספק עדשות") — action="search" ו-query = ביטוי חיפוש תמציתי בעברית.',
+      'התחשב בכל היסטוריית השיחה שסופקה — אל תשאל שוב על מידע שהמשתמש כבר נתן. צבור את מה שנאמר עד כה לכדי צורך אחד.',
+      'החלט אם יש כבר מספיק מידע לזהות מוצר/שירות שיקומי לחיפוש (action="search"), או שחסר מידע מהותי בלבד ואז שאל שאלת הבהרה אחת וקצרה (action="clarify").',
+      'אם המשתמש כבר ציין תחום/מוצר/שירות (גם על פני כמה הודעות, למשל "גרון" ואז "בדיקת רופא") — אל תשאל שוב, אלא action="search" עם query שמגלם את מלוא הצורך (למשל "רופא אף אוזן גרון" או "בדיקת גרון").',
+      'במקרה clarify: שאלה קצרה, אמפתית, בעברית, ללא חזרה על מה שכבר נשאל, עם 2-4 הצעות קצרות ב-suggestions.',
+      'תמיד מלא גם את השדה query עם ההערכה הטובה ביותר לצורך הנוכחי (בעברית), גם כאשר action="clarify".',
       'החזר JSON בלבד: {"action":"clarify"|"search","question":string,"query":string,"suggestions":string[]}',
     ].join(' ');
-    return this.gemini.generateJson(systemInstruction, `הודעת המשתמש: "${message}"`);
+    const prompt = [
+      'היסטוריית השיחה עד כה:',
+      this.historyText(history),
+      '',
+      `ההודעה הנוכחית של המשתמש: "${message}"`,
+    ].join('\n');
+    return this.gemini.generateJson(systemInstruction, prompt);
   }
 
   /**
@@ -693,11 +751,13 @@ export class SearchService {
       };
     }
 
+    const history: ChatTurn[] = Array.isArray(ctx.history) ? [...ctx.history] : [];
     const base = await this.chatLocal(analysis.query, ctx);
     try {
       const aiReply = await this.aiReply(
         `על סמך מסמך הפניה. סיכום המסמך: ${analysis.summary ?? ''}. הצורך שזוהה: ${analysis.query}`,
         base,
+        history,
       );
       if (aiReply) base.reply = aiReply;
     } catch (e) {
@@ -705,6 +765,13 @@ export class SearchService {
     }
     const prefix = analysis.summary?.trim() ? `מהמסמך הבנתי: ${analysis.summary.trim()}\n\n` : '';
     base.reply = prefix + base.reply;
+    base.context = base.context || ctx;
+    base.context.history = this.appendHistory(
+      history,
+      `📎 מסמך הפניה: ${analysis.summary?.trim() || file.originalname || 'מסמך'}`,
+      base.reply,
+    );
+    base.context.clarifyCount = 0;
     return base;
   }
 
@@ -712,7 +779,11 @@ export class SearchService {
    * מנסח תשובה בעזרת Gemini על סמך הנתונים שנשלפו בלבד (grounding).
    * מחזיר null אם ה-AI כבוי או נכשל — ואז נשמרת התשובה המקומית.
    */
-  private async aiReply(userMessage: string, base: ChatResponse): Promise<string | null> {
+  private async aiReply(
+    userMessage: string,
+    base: ChatResponse,
+    history: ChatTurn[] = [],
+  ): Promise<string | null> {
     if (!this.gemini.isEnabled()) return null;
 
     const results = (base.results ?? []).slice(0, 5).map((r) => ({
@@ -742,13 +813,16 @@ export class SearchService {
     ].join(' ');
 
     const prompt = [
-      `שאלת המשתמש: "${userMessage}"`,
+      'היסטוריית השיחה עד כה:',
+      this.historyText(history),
+      '',
+      `שאלת המשתמש הנוכחית: "${userMessage}"`,
       '',
       'נתוני המערכת שנשלפו (הבסיס היחיד לתשובתך):',
       JSON.stringify(data, null, 2),
       '',
       hasData
-        ? 'נסח תשובה קצרה שמסבירה מה נמצא ומכוונת את המשתמש להמשך (למשל לפתוח מק"ט, לבקש ספקים או פרטי קשר).'
+        ? 'נסח תשובה קצרה שמסבירה מה נמצא ומכוונת את המשתמש להמשך (למשל לפתוח מק"ט, לבקש ספקים או פרטי קשר). התייחס להקשר השיחה ואל תחזור על מה שכבר נאמר.'
         : 'לא נמצאו נתונים מתאימים — הסבר זאת בעדינות והצע לנסח מחדש או לבחור קטגוריה.',
     ].join('\n');
 

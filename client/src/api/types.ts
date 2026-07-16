@@ -98,11 +98,18 @@ export interface AiSearchResponse {
   message: string | null;
 }
 
+export interface ChatTurn {
+  role: 'user' | 'bot';
+  text: string;
+}
+
 export interface ChatContext {
   makat?: string | null;
   product?: string | null;
   awaitingLocation?: boolean;
   location?: string | null;
+  history?: ChatTurn[];
+  clarifyCount?: number;
 }
 
 export interface ChatResponse {
