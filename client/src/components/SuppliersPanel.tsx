@@ -1,6 +1,9 @@
 import { Fragment, useState } from 'react';
 import type { Supplier } from '../api/types';
 import { Icon } from './icons';
+import { normalizePhone, telHref } from '../format';
+
+const PHONE_KEYS = new Set<keyof Supplier>(['mobile', 'workPhone', 'landline']);
 
 /** שדות ספק נוספים שנחשפים בהרחבת שורת הספק (כולם כבר מגיעים מה-API). */
 const SUPPLIER_DETAIL: [keyof Supplier, string][] = [
@@ -18,8 +21,17 @@ const SUPPLIER_DETAIL: [keyof Supplier, string][] = [
   ['validTo', 'סיום תוקף'],
 ];
 
-function phone(s: { mobile?: string | null; workPhone?: string | null; landline?: string | null }) {
-  return s.mobile || s.workPhone || s.landline || '—';
+/** תא טלפון לחיץ (חיוג). */
+function PhoneLink({ value }: { value: string | null | undefined }) {
+  const href = telHref(value);
+  const display = normalizePhone(value) || '—';
+  return href ? (
+    <a href={href} onClick={(e) => e.stopPropagation()}>
+      {display}
+    </a>
+  ) : (
+    <>{display}</>
+  );
 }
 
 /**
@@ -119,7 +131,9 @@ export function SuppliersPanel({
                           <td>{s.name || '—'}</td>
                           <td>{s.city || '—'}</td>
                           <td>{s.district || '—'}</td>
-                          <td>{phone(s)}</td>
+                          <td>
+                            <PhoneLink value={s.mobile || s.workPhone || s.landline} />
+                          </td>
                           <td>{s.profession || '—'}</td>
                           <td className="sup-caret">
                             {details.length ? (
@@ -137,7 +151,13 @@ export function SuppliersPanel({
                                     <div className="detail-cell" key={String(k)}>
                                       <div className="k">{label}</div>
                                       <div className="v">
-                                        {k === 'email' ? <a href={`mailto:${v}`}>{v}</a> : v}
+                                        {k === 'email' ? (
+                                          <a href={`mailto:${v}`}>{v}</a>
+                                        ) : PHONE_KEYS.has(k) ? (
+                                          <PhoneLink value={s[k] as string} />
+                                        ) : (
+                                          v
+                                        )}
                                       </div>
                                     </div>
                                   );

@@ -21,6 +21,8 @@ interface Route {
   variantId: string | null;
   /** שאילתת חיפוש נכנסת מ-deep-link (רק כאשר view === 'search'). */
   searchQuery: string | null;
+  /** מזהה וריאנט להצגה כחלון קופץ (modal) מעל דף החיפוש. */
+  popupVariant: string | null;
 }
 
 interface AppState {
@@ -29,6 +31,10 @@ interface AppState {
   variantId: string | null;
   /** שאילתה שהוזרקה לעמוד החיפוש (למשל מהעוזר החכם). */
   searchQuery: string | null;
+  /** וריאנט המוצג כחלון קופץ (modal), אם קיים. */
+  popupVariant: string | null;
+  /** סוגר את החלון הקופץ (חוזר לדף החיפוש). */
+  closePopup: () => void;
   setView: (v: View) => void;
   /** מעבר לתצוגת וריאנט בודד ייעודית (מעדכן את ה-URL לשיתוף). */
   openVariant: (entityId: string) => void;
@@ -40,6 +46,10 @@ interface AppState {
   showToast: (message: string, kind?: ToastState['kind']) => void;
   theme: Theme;
   toggleTheme: () => void;
+  /** מונה שמתקדם בכל "דף הבית" — רכיבים מאזינים לו כדי לאפס את מצבם. */
+  resetSignal: number;
+  /** איפוס מלא: חוזר לחיפוש ומנקה תוצאות + שיחה. */
+  goHome: () => void;
 }
 
 type Theme = 'light' | 'dark';
@@ -59,19 +69,18 @@ function initialTheme(): Theme {
 function parseHash(): Route {
   const raw = window.location.hash.replace(/^#\/?/, '');
   const [seg, ...rest] = raw.split('/');
-  if (seg === 'variant') {
-    return {
-      view: 'variant',
-      variantId: rest.length ? decodeURIComponent(rest.join('/')) : null,
-      searchQuery: null,
-    };
+  const arg = rest.length ? decodeURIComponent(rest.join('/')) : null;
+  if (seg === 'popup') {
+    // חלון קופץ מעל דף החיפוש
+    return { view: 'search', variantId: null, searchQuery: null, popupVariant: arg };
   }
-  if (seg === 'admin') return { view: 'admin', variantId: null, searchQuery: null };
-  return {
-    view: 'search',
-    variantId: null,
-    searchQuery: rest.length ? decodeURIComponent(rest.join('/')) : null,
-  };
+  if (seg === 'variant') {
+    return { view: 'variant', variantId: arg, searchQuery: null, popupVariant: null };
+  }
+  if (seg === 'admin') {
+    return { view: 'admin', variantId: null, searchQuery: null, popupVariant: null };
+  }
+  return { view: 'search', variantId: null, searchQuery: arg, popupVariant: null };
 }
 
 /** בניית ה-hash מתוך view + ארגומנט אופציונלי (מזהה וריאנט / שאילתת חיפוש). */
@@ -83,6 +92,11 @@ function hashFor(view: View, arg?: string | null): string {
   return arg ? `#/search/${encodeURIComponent(arg)}` : '#/search';
 }
 
+/** קישור לחלון קופץ (modal) של וריאנט — לשיתוף. */
+export function popupHash(entityId: string): string {
+  return `#/popup/${encodeURIComponent(entityId)}`;
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<Route>(parseHash);
   const [adminToken, setAdminTokenState] = useState<string>(
@@ -90,6 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const [toast, setToast] = useState<ToastState | null>(null);
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [resetSignal, setResetSignal] = useState(0);
   const timer = useRef<number>();
 
   // החלת ערכת הנושא על שורש המסמך + שמירה מקומית.
@@ -112,6 +127,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setView = useCallback((v: View) => {
     window.location.hash = hashFor(v);
+  }, []);
+
+  const goHome = useCallback(() => {
+    setResetSignal((n) => n + 1);
+    window.location.hash = hashFor('search');
+  }, []);
+
+  const closePopup = useCallback(() => {
+    window.location.hash = hashFor('search');
   }, []);
 
   const openVariant = useCallback((entityId: string) => {
@@ -139,6 +163,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         view: route.view,
         variantId: route.variantId,
         searchQuery: route.searchQuery,
+        popupVariant: route.popupVariant,
+        closePopup,
         setView,
         openVariant,
         openSearch,
@@ -148,6 +174,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         showToast,
         theme,
         toggleTheme,
+        resetSignal,
+        goHome,
       }}
     >
       {children}

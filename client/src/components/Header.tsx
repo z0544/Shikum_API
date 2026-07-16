@@ -2,7 +2,7 @@ import { useApp } from '../state/AppContext';
 import { Icon } from './icons';
 
 export function Header() {
-  const { view, setView, theme, toggleTheme } = useApp();
+  const { view, setView, theme, toggleTheme, goHome } = useApp();
   return (
     <header className="header">
       <div className="header-bar">
@@ -29,7 +29,7 @@ export function Header() {
         >
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
-        <button className="home-box" title="דף הבית" aria-label="דף הבית" onClick={() => setView('search')}>
+        <button className="home-box" title="דף הבית (איפוס)" aria-label="דף הבית" onClick={goHome}>
           <Icon name="home" />
         </button>
       </div>

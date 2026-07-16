@@ -65,7 +65,7 @@ function fromAiResult(r: AiResult): UniGroup {
 }
 
 export function SearchView() {
-  const { showToast, openVariant, searchQuery } = useApp();
+  const { showToast, openVariant, searchQuery, resetSignal } = useApp();
   const [q, setQ] = useState('');
   const [mode, setMode] = useState<Mode>('exact');
   const [match, setMatch] = useState('contains');
@@ -80,9 +80,25 @@ export function SearchView() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [suggests, setSuggests] = useState<string[]>([]);
+  const [showCurl, setShowCurl] = useState(false);
   const lastInjected = useRef<string | null>(null);
   const suggestTimer = useRef<number>();
   const suggestSeq = useRef(0);
+
+  // "דף הבית" — איפוס מלא של דף החיפוש.
+  useEffect(() => {
+    if (resetSignal === 0) return;
+    setQ('');
+    setMode('exact');
+    setGroups(null);
+    setMeta({ count: 0 });
+    setSearchedQuery('');
+    setResultParams(null);
+    setExpanded(new Set());
+    setSelected(null);
+    setSuggests([]);
+    lastInjected.current = null;
+  }, [resetSignal]);
 
   // שאילתה שהוזרקה מ-deep-link (למשל מהעוזר החכם) — ממלאת ומריצה מיד (במצב מדויק).
   useEffect(() => {
@@ -123,19 +139,38 @@ export function SearchView() {
     setSelected(null);
     try {
       let uni: UniGroup[];
+      let ranMode: Mode = useMode;
       if (useMode === 'smart') {
         const data = await api.aiSearch(term);
         uni = data.results.map(fromAiResult);
         setMeta({ count: data.count, explanation: data.parsed.explanation, location: data.user_location });
         if (!data.count) showToast(data.message || 'לא נמצאו תוצאות', 'info');
       } else {
-        const data = await api.searchItems({ q: term, match, field });
-        uni = (data.groups || []).map(fromMaktGroup);
-        setMeta({ count: data.group_count ?? 0 });
+        try {
+          const data = await api.searchItems({ q: term, match, field });
+          uni = (data.groups || []).map(fromMaktGroup);
+          setMeta({ count: data.group_count ?? 0 });
+        } catch (e) {
+          // נפילה חכמה: אין התאמה מדויקת בחיפוש הרגיל (ברירת המחדל) — מנסים חיפוש חכם,
+          // כדי שמונחים כמו "פסיכולוג חינוכי" עדיין יחזירו תוצאות רלוונטיות.
+          const noExact = e instanceof ApiError && e.status === 404;
+          if (!noExact || match !== 'contains' || field !== 'all') throw e;
+          const ai = await api.aiSearch(term);
+          uni = ai.results.map(fromAiResult);
+          ranMode = 'smart';
+          setMeta({
+            count: ai.count,
+            explanation: ai.count
+              ? 'לא נמצאו התאמות מדויקות — מוצגות תוצאות חיפוש חכם'
+              : null,
+            location: ai.user_location,
+          });
+          if (!ai.count) showToast('לא נמצאו תוצאות', 'info');
+        }
       }
       setGroups(uni);
       setSearchedQuery(term);
-      setResultParams({ mode: useMode, match, field });
+      setResultParams({ mode: ranMode, match, field });
       setExpanded(new Set(uni.slice(0, 1).map((g) => g.catalogNumber)));
     } catch (e) {
       setGroups([]);
@@ -162,6 +197,29 @@ export function SearchView() {
         ? api.exportAiUrl(searchedQuery)
         : api.exportSearchUrl({ q: searchedQuery, match: resultParams.match, field: resultParams.field })
       : null;
+
+  // פקודת cURL לקריאת ה-API של החיפוש הנוכחי — לייחצון/אינטגרציה של מפתחים.
+  function buildCurl(): string {
+    const origin = window.location.origin;
+    if (!resultParams) return '';
+    if (resultParams.mode === 'smart') {
+      return `curl -X POST '${origin}/api/ai/search' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify({ query: searchedQuery })}'`;
+    }
+    const qs = new URLSearchParams({
+      q: searchedQuery,
+      match: resultParams.match,
+      field: resultParams.field,
+      grouped: 'true',
+    });
+    return `curl '${origin}/api/items?${qs.toString()}'`;
+  }
+
+  function copyCurl() {
+    navigator.clipboard
+      ?.writeText(buildCurl())
+      .then(() => showToast('פקודת cURL הועתקה', 'ok'))
+      .catch(() => showToast('לא ניתן להעתיק', 'error'));
+  }
 
   return (
     <>
@@ -249,6 +307,15 @@ export function SearchView() {
                 <Icon name="download" /> ייצוא Excel
               </a>
             )}
+            {resultParams && meta.count > 0 && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => setShowCurl(true)}
+                title="הצג את פקודת ה-cURL של קריאת ה-API"
+              >
+                {'</>'} API / cURL
+              </button>
+            )}
           </div>
           <p className="hint">
             {mode === 'smart'
@@ -263,7 +330,7 @@ export function SearchView() {
               <h2>תוצאות חיפוש</h2>
               <span className="count-pill">{groups ? `${meta.count} מק"טים` : '0'}</span>
             </div>
-            {mode === 'smart' && meta.explanation && groups && groups.length > 0 && (
+            {meta.explanation && groups && groups.length > 0 && (
               <p className="hint" style={{ marginTop: 0 }}>
                 {meta.explanation}
                 {meta.location ? ` · מיקום: ${meta.location}` : ''}
@@ -337,6 +404,36 @@ export function SearchView() {
           </div>
         </div>
       </main>
+
+      {showCurl && (
+        <div className="popup-overlay" onClick={() => setShowCurl(false)}>
+          <div
+            className="popup-modal curl-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="פקודת cURL"
+          >
+            <div className="popup-head">
+              <h3>cURL — קריאת ה-API</h3>
+              <button className="chat-close" onClick={() => setShowCurl(false)} aria-label="סגור">
+                <Icon name="close" />
+              </button>
+            </div>
+            <p className="hint" style={{ marginTop: 0 }}>
+              פקודת cURL לקריאת ה-API של החיפוש הנוכחי — לייחצון ואינטגרציה.
+            </p>
+            <pre className="curl-block">{buildCurl()}</pre>
+            <div className="chat-report-actions">
+              <button className="btn btn-primary btn-sm" onClick={copyCurl}>
+                <Icon name="copy" /> העתק פקודה
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowCurl(false)}>
+                סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

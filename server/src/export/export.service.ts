@@ -16,6 +16,41 @@ const VARIANT_COLUMNS: Array<[string, string]> = [
 
 const PHONE_KEYS = ['mobile', 'workPhone', 'landline'];
 
+/** כל שדות הספק לייצוא (מפתח -> כותרת עברית). */
+const SUPPLIER_COLUMNS: Array<[string, string]> = [
+  ['modSupplierId', 'מספר ספק משהב"ט'],
+  ['rehabSupplierId', 'מספר ספק שיקום'],
+  ['name', 'שם ספק'],
+  ['city', 'יישוב'],
+  ['district', 'מחוז'],
+  ['street', 'רחוב ומספר בית'],
+  ['mobile', 'נייד'],
+  ['workPhone', 'טלפון עבודה'],
+  ['landline', 'טלפון נייח'],
+  ['email', 'דוא"ל'],
+  ['profession', 'מקצוע'],
+  ['specialization', 'התמחות'],
+  ['subSpecialization', 'תת התמחות'],
+  ['therapeuticApproach', 'גישה טיפולית'],
+  ['validFrom', 'תחילת תוקף'],
+  ['validTo', 'סיום תוקף'],
+];
+
+const PHONE_COLUMN_KEYS = new Set(['mobile', 'workPhone', 'landline']);
+
+/** משלים 0 מוביל למספרי טלפון ישראליים שאבד להם (לרוב באקסל שמפרש כמספר). */
+function normalizePhone(raw: unknown): string {
+  if (raw === null || raw === undefined) return '';
+  let d = String(raw).trim();
+  if (!d) return '';
+  d = d.replace(/[^\d+]/g, '');
+  if (d.startsWith('+972')) d = '0' + d.slice(4);
+  else if (d.startsWith('972')) d = '0' + d.slice(3);
+  d = d.replace(/\D/g, '');
+  if (d && !d.startsWith('0') && (d.length === 8 || d.length === 9)) d = '0' + d;
+  return d;
+}
+
 @Injectable()
 export class ExportService {
   private nowHe(): string {
@@ -25,9 +60,15 @@ export class ExportService {
   private supplierPhone(s: Record<string, unknown>): string {
     for (const k of PHONE_KEYS) {
       const v = s[k];
-      if (v) return String(v).trim();
+      if (v) return normalizePhone(v);
     }
     return '';
+  }
+
+  /** ערך תא של ספק — עם השלמת 0 לעמודות טלפון. */
+  private supplierCell(s: Record<string, unknown>, key: string): unknown {
+    const v = s[key];
+    return PHONE_COLUMN_KEYS.has(key) ? normalizePhone(v) : v;
   }
 
   private amountRange(variants: Array<Record<string, unknown>>): string {
@@ -161,13 +202,9 @@ export class ExportService {
     );
 
     const wsSup = wb.addWorksheet('ספקים');
-    const supHeaders = ['מספר ספק', 'שם ספק', 'יישוב', 'טלפון', 'מחוז', 'בתוקף'];
+    const supHeaders = [...SUPPLIER_COLUMNS.map(([, h]) => h), 'בתוקף'];
     const supRows = params.suppliers.map((s) => [
-      s.modSupplierId,
-      s.name,
-      s.city,
-      this.supplierPhone(s),
-      s.district,
+      ...SUPPLIER_COLUMNS.map(([k]) => this.supplierCell(s, k)),
       s.isActiveAgreement === false ? 'לא' : 'כן',
     ]);
     this.writeTable(wsSup, supHeaders, supRows);
@@ -203,10 +240,7 @@ export class ExportService {
         allSuppliers.push([
           r.catalogNumber,
           s.is_nearest ? 'הכי קרוב' : s.proximity_label || '',
-          s.name,
-          s.city,
-          this.supplierPhone(s),
-          s.district,
+          ...SUPPLIER_COLUMNS.map(([k]) => this.supplierCell(s, k)),
           s.isActiveAgreement === false ? 'לא' : 'כן',
         ]);
       }
@@ -226,7 +260,11 @@ export class ExportService {
     this.writeTable(wsVar, ['מק"ט', ...VARIANT_COLUMNS.map(([, h]) => h)], allVariants);
 
     const wsSup = wb.addWorksheet('ספקים');
-    this.writeTable(wsSup, ['מק"ט', 'קרבה', 'שם ספק', 'יישוב', 'טלפון', 'מחוז', 'בתוקף'], allSuppliers);
+    this.writeTable(
+      wsSup,
+      ['מק"ט', 'קרבה', ...SUPPLIER_COLUMNS.map(([, h]) => h), 'בתוקף'],
+      allSuppliers,
+    );
 
     return this.toBuffer(wb);
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useApp } from '../state/AppContext';
+import { useApp, popupHash } from '../state/AppContext';
 import { Breadcrumbs } from './Header';
 import { DetailPanel } from './DetailPanel';
 import { Icon } from './icons';
@@ -25,11 +25,10 @@ export function VariantView() {
   }
 
   /**
-   * מעתיק קישור לדף הווריאנט. בגוף עשיר (מייל/וורד) מודבק כעוגן HTML שטקסט
-   * התצוגה שלו הוא המק"ט בלבד; בטקסט רגיל מודבק ה-URL המלא.
+   * מעתיק קישור נתון כעוגן HTML שטקסט התצוגה שלו הוא המק"ט (בגוף עשיר),
+   * ובטקסט רגיל — ה-URL המלא.
    */
-  async function copyLink() {
-    const url = window.location.href;
+  async function copyAsLink(url: string, okMsg: string) {
     const makt = catalogNumber ?? (variantId ? variantId.split('-')[0] : '');
     const esc = (s: string) =>
       s
@@ -53,11 +52,23 @@ export function VariantView() {
       } else {
         await navigator.clipboard.writeText(url);
       }
-      showToast(makt ? `הקישור למק"ט ${makt} הועתק` : 'הקישור הועתק', 'ok');
+      showToast(okMsg, 'ok');
     } catch {
       // דפדפנים ללא הרשאת clipboard (למשל ללא HTTPS) — נפילה חלופה לבחירה ידנית.
       window.prompt('העתק את הקישור:', url);
     }
+  }
+
+  /** קישור לעמוד הווריאנט המלא. */
+  function copyLink() {
+    copyAsLink(window.location.href, 'הקישור לעמוד הווריאנט הועתק');
+  }
+
+  /** קישור שנפתח כחלון קופץ (modal) מעל דף החיפוש. */
+  function copyPopupLink() {
+    if (!variantId) return;
+    const base = window.location.href.split('#')[0];
+    copyAsLink(base + popupHash(variantId), 'הקישור לחלון קופץ הועתק');
   }
 
   return (
@@ -81,9 +92,18 @@ export function VariantView() {
               הצג וריאנט
             </button>
             {variantId && (
-              <button className="btn btn-green" onClick={copyLink} title="העתק קישור ישיר לווריאנט זה">
-                <Icon name="link" /> העתק קישור
-              </button>
+              <>
+                <button className="btn btn-green" onClick={copyLink} title="העתק קישור לעמוד הווריאנט">
+                  <Icon name="link" /> העתק קישור
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={copyPopupLink}
+                  title="העתק קישור שנפתח כחלון קופץ מעל דף החיפוש"
+                >
+                  <Icon name="external" /> קישור לחלון קופץ
+                </button>
+              </>
             )}
             <button className="btn btn-ghost" onClick={() => setView('search')}>
               <Icon name="chevron-left" /> חזרה לחיפוש

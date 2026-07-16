@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import type { AiResult, ChatContext, Supplier } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { Icon } from './icons';
+import { normalizePhone, telHref } from '../format';
 
 interface Msg {
   id: number;
@@ -42,7 +43,7 @@ function detectIntent(text: string): Intent {
 }
 
 function phoneOf(s: Supplier) {
-  return s.mobile || s.workPhone || s.landline || '—';
+  return normalizePhone(s.mobile || s.workPhone || s.landline) || '—';
 }
 
 /** קישור ניווט (Waze) לפי כתובת הספק. */
@@ -96,7 +97,7 @@ function StreamedText({
 }
 
 export function ChatBot() {
-  const { openVariant, openSearch, showToast } = useApp();
+  const { openVariant, openSearch, showToast, resetSignal } = useApp();
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [ctx, setCtx] = useState<ChatContext>({});
@@ -147,6 +148,15 @@ export function ChatBot() {
   useEffect(() => {
     scrollToBottom(true);
   }, [msgs, loading]);
+
+  // "דף הבית" — איפוס השיחה וסגירת החלון.
+  useEffect(() => {
+    if (resetSignal === 0) return;
+    newConversation();
+    setOpen(false);
+    setReportCodes(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetSignal]);
 
   async function send(text: string, ctxOverride?: ChatContext) {
     const q = text.trim();
@@ -394,7 +404,19 @@ export function ChatBot() {
                         >
                           <div className="chat-result-title">{s.name || '—'}</div>
                           <div className="chat-result-meta">
-                            <span className="chip">☎ {phoneOf(s)}</span>
+                            {telHref(s.mobile || s.workPhone || s.landline) ? (
+                              <a
+                                className="chip chip-tel"
+                                href={telHref(s.mobile || s.workPhone || s.landline)!}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Icon name="phone" /> {phoneOf(s)}
+                              </a>
+                            ) : (
+                              <span className="chip">
+                                <Icon name="phone" /> {phoneOf(s)}
+                              </span>
+                            )}
                             {s.city && <span className="chip">{s.city}</span>}
                             {s.proximity_label && <span className="chip green">{s.proximity_label}</span>}
                             {s.profession && <span className="chip">{s.profession}</span>}

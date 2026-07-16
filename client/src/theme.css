@@ -891,3 +891,66 @@ mark.hl { background: var(--mark); color: var(--mark-ink); border-radius: 3px; p
 /* ===== backlog נרדפות (אדמין) ===== */
 .backlog-row { display: flex; align-items: center; gap: 8px; }
 .backlog-row input { flex: 1; }
+
+/* ===== צ'יפ טלפון לחיץ ===== */
+.chip-tel {
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chip-tel:hover { background: var(--table-head); }
+
+/* ===== חלון קופץ (modal) לווריאנט / cURL ===== */
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(20, 40, 90, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  animation: chat-pop 0.14s ease-out;
+}
+.popup-modal {
+  background: var(--bg);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(20, 40, 90, 0.4);
+  width: 720px;
+  max-width: 100%;
+}
+.popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, var(--brand-2), var(--brand));
+  color: #fff;
+  border-radius: 16px 16px 0 0;
+}
+.popup-head h3 { margin: 0; font-size: 16px; }
+.popup-id { font-family: monospace; opacity: 0.9; }
+.popup-head .chat-close { color: #fff; }
+.popup-head-actions { display: flex; align-items: center; gap: 8px; }
+.popup-head-actions .btn-ghost { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.popup-head-actions .btn-ghost:hover { background: rgba(255, 255, 255, 0.3); }
+.popup-body { padding: 16px; }
+
+.curl-modal { width: 640px; padding: 18px; }
+.curl-block {
+  background: var(--ink);
+  color: #e6edf7;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  direction: ltr;
+  text-align: left;
+  margin: 10px 0 14px;
+}
