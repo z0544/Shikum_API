@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CatalogItem } from '@prisma/client';
 import { CatalogRepository } from './catalog.repository';
 import { parseField, parseMatchMode } from './catalog.types';
+import { normalizeCatalogNumber } from '../common/entity-id';
 
 export const REFUND_NOTE = 'יש לבדוק את תאריך ביצוע השירות בהתאם להנחיות ההחזר.';
 
@@ -121,5 +122,25 @@ export class CatalogService {
 
   async getSuppliersForMakt(makt: string) {
     return this.repo.suppliersForMakt(makt);
+  }
+
+  /** חיפוש עמיד-לשגיאות לפי דמיון טריגרמים (pg_trgm) — fallback לחיפוש החכם. */
+  async searchByTrigram(query: string, limit: number) {
+    return this.repo.searchByTrigram(query, limit);
+  }
+
+  /**
+   * מחזיר את קוד השירות (catalogPricelistNum) של המק"ט — הערך הראשון הקיים
+   * מבין הוריאנטים. אם למק"ט אין קוד שירות כלל (או שאינו קיים) — serviceCode יהיה null.
+   */
+  async getServiceCodeForMakt(
+    makt: string,
+  ): Promise<{ catalogNumber: string; serviceCode: string | null }> {
+    const items = await this.repo.findByCatalogNumber(makt);
+    const withCode = items.find((i) => i.catalogPricelistNum && i.catalogPricelistNum.trim());
+    return {
+      catalogNumber: normalizeCatalogNumber(makt),
+      serviceCode: withCode?.catalogPricelistNum?.trim() ?? null,
+    };
   }
 }

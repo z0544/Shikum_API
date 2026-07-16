@@ -18,7 +18,53 @@
   --line: #d9e0ea;
   --shadow: 0 1px 3px rgba(16, 32, 64, 0.08), 0 6px 18px rgba(16, 32, 64, 0.06);
   --radius: 12px;
+  /* משטחים סמנטיים (למצב כהה) */
+  --hover: #f6f9ff;
+  --surface-2: #eef2f8;
+  --mark: #fde68a;
+  --mark-ink: #7a4e00;
+  /* סקאלת מרווחים */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 18px;
+  --space-5: 24px;
+  --space-6: 36px;
+  /* סקאלת טיפוגרפיה */
+  --fs-1: 12px;
+  --fs-2: 13.5px;
+  --fs-3: 15px;
+  --fs-4: 17px;
+  --fs-5: 20px;
+  /* הצללות */
+  --elev-1: 0 1px 3px rgba(16, 32, 64, 0.08);
+  --elev-2: 0 8px 24px rgba(16, 32, 64, 0.12);
 }
+
+/* ===== מצב כהה (Dark mode) ===== */
+:root[data-theme='dark'] {
+  --brand: #3b6fe0;
+  --brand-dark: #2a55c8;
+  --brand-2: #4d7ff0;
+  --green: #3ec48f;
+  --green-dark: #34a877;
+  --bg: #0f1622;
+  --panel: #182233;
+  --table-zone: #1c2740;
+  --table-head: #233152;
+  --ink: #e6ebf3;
+  --muted: #9aa6b8;
+  --line: #2c3852;
+  --hover: #1e2a42;
+  --surface-2: #212d44;
+  --mark: #7a5f16;
+  --mark-ink: #ffe9a8;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+  --elev-1: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --elev-2: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+:root { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -92,7 +138,7 @@ body {
   transition: background 0.15s;
 }
 .nav button:hover { background: rgba(255, 255, 255, 0.12); }
-.nav button.active { background: #fff; color: var(--brand); }
+.nav button.active { background: var(--panel); color: var(--brand); }
 .home-box {
   width: 44px; height: 44px;
   display: grid; place-items: center;
@@ -103,7 +149,7 @@ body {
 
 /* ===== Breadcrumbs ===== */
 .breadcrumbs {
-  background: #fff;
+  background: var(--panel);
   border-bottom: 1px solid var(--line);
   font-size: 13.5px;
   color: var(--muted);
@@ -177,7 +223,7 @@ main {
 input, select, textarea {
   font: inherit;
   color: var(--ink);
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 10px 12px;
@@ -203,7 +249,7 @@ input:focus, select:focus, textarea:focus {
 .btn-primary:hover:not(:disabled) { background: var(--brand-dark); }
 .btn-green { background: var(--green); color: #fff; }
 .btn-green:hover:not(:disabled) { background: var(--green-dark); }
-.btn-ghost { background: #eef2f8; color: var(--brand-dark); }
+.btn-ghost { background: var(--surface-2); color: var(--brand-dark); }
 .btn-ghost:hover:not(:disabled) { background: #e0e8f6; }
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 
@@ -225,7 +271,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: 10px;
   margin-bottom: 10px;
   overflow: hidden;
-  background: #fff;
+  background: var(--panel);
 }
 .result-group.selected { border-color: var(--brand-2); box-shadow: 0 0 0 2px rgba(42,85,200,.15); }
 .group-head {
@@ -234,9 +280,9 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
   padding: 12px 14px;
   cursor: pointer;
-  background: #fff;
+  background: var(--panel);
 }
-.group-head:hover { background: #f6f9ff; }
+.group-head:hover { background: var(--hover); }
 .makt-badge {
   background: var(--table-head);
   color: var(--brand-dark);
@@ -251,13 +297,19 @@ input:focus, select:focus, textarea:focus {
 .group-meta { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {
   font-size: 12px;
-  background: #eef2f8;
+  background: var(--surface-2);
   color: var(--muted);
   border-radius: 999px;
   padding: 2px 10px;
 }
 .chip.green { background: #e4f6ee; color: var(--green-dark); }
 .chip.amber { background: #fbeecb; color: #8a5b00; font-weight: 600; }
+.chip.exact {
+  background: var(--green);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(56, 178, 131, 0.25);
+}
 .variant-row {
   display: flex;
   align-items: center;
@@ -273,7 +325,7 @@ input:focus, select:focus, textarea:focus {
 .variant-row .spacer { flex: 1; }
 .variant-open {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   color: var(--brand-dark);
   border-radius: 6px;
   padding: 3px 9px;
@@ -362,7 +414,7 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   padding: 26px;
   text-align: center;
   color: var(--muted);
-  background: #f6f9ff;
+  background: var(--hover);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -370,7 +422,7 @@ table.data tbody tr.nearest { background: #e4f6ee; }
 .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .tabs button {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   padding: 8px 16px;
   border-radius: 9px;
   cursor: pointer;
@@ -446,7 +498,7 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   max-width: calc(100vw - 44px);
   height: 552px;
   max-height: calc(100vh - 130px);
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: 0 20px 54px rgba(20, 40, 90, 0.3);
@@ -517,7 +569,7 @@ table.data tbody tr.nearest { background: #e4f6ee; }
 }
 .chat-msg .chat-text { white-space: pre-wrap; }
 .chat-msg.bot {
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
   color: var(--ink);
   align-self: flex-start;
@@ -532,14 +584,14 @@ table.data tbody tr.nearest { background: #e4f6ee; }
 
 .chat-results { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .chat-result {
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 8px 10px;
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
 }
-.chat-result:hover { border-color: var(--brand-2); background: #f2f6ff; }
+.chat-result:hover { border-color: var(--brand-2); background: var(--hover); }
 .chat-result-top { display: flex; align-items: center; gap: 8px; }
 .chat-result-title { font-weight: 600; font-size: 13px; color: var(--ink); }
 .chat-result-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -550,10 +602,10 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   flex-wrap: wrap;
   gap: 6px;
   padding: 10px 12px 0;
-  background: #fff;
+  background: var(--panel);
 }
 .chat-supplier { cursor: default; }
-.chat-supplier:hover { border-color: var(--line); background: #fff; }
+.chat-supplier:hover { border-color: var(--line); background: var(--panel); }
 .chat-mail { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--brand); }
 .chat-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chat-chip.sm { padding: 3px 9px; font-size: 11.5px; }
@@ -564,7 +616,7 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   max-height: 168px;
   overflow-y: auto;
   border-top: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
 }
 .chat-ac-item {
   text-align: right;
@@ -579,9 +631,9 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.chat-ac-item:hover { background: #f2f6ff; color: var(--brand); }
+.chat-ac-item:hover { background: var(--hover); color: var(--brand); }
 .chat-chip {
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--brand-2);
   color: var(--brand);
   border-radius: 999px;
@@ -597,7 +649,7 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   gap: 8px;
   padding: 10px;
   border-top: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
 }
 .chat-foot input[type='text'],
 .chat-foot > input:not([type]) { flex: 1; }
@@ -607,7 +659,7 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   height: 38px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel);
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
@@ -651,3 +703,191 @@ table.data tbody tr.nearest { background: #e4f6ee; }
   vertical-align: middle;
 }
 .chat-status-dot.busy { background: #f5c451; animation: chat-blink 1s infinite; }
+
+/* --- קודים שלא נמצאו + דיווח --- */
+.chat-unmatched {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fff6e5;
+  border: 1px solid #f0d79a;
+  border-radius: 10px;
+}
+.chat-unmatched-title { font-size: 12.5px; font-weight: 700; color: #7a5a12; margin-bottom: 8px; }
+.chat-unmatched-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.chat-unmatched-row .chip { font-family: monospace; }
+.chat-report-all { margin-top: 8px; border-color: #c0392b; color: #c0392b; }
+.chat-report-all:hover { background: #c0392b; color: #fff; }
+
+.chat-report-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(20, 40, 90, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: chat-pop 0.14s ease-out;
+}
+.chat-report-modal {
+  background: var(--panel);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(20, 40, 90, 0.35);
+  width: 420px;
+  max-width: 100%;
+  padding: 18px;
+}
+.chat-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.chat-report-head h3 { margin: 0; font-size: 17px; color: var(--brand-dark); }
+.chat-report-head .chat-close { color: var(--muted); font-size: 16px; }
+.chat-report-sub { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
+.chat-report-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--table-zone);
+  border-radius: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.chat-report-list .chip { font-family: monospace; font-size: 13px; }
+.chat-report-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-report-foot { font-size: 12px; color: var(--muted); margin: 12px 0 0; }
+
+/* ===== אייקונים ===== */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.14em;
+  flex: 0 0 auto;
+}
+.btn .icon, .chat-chip .icon, .variant-open .icon, .nav button .icon { margin-inline-end: 4px; }
+.chevron { color: var(--muted); }
+
+/* ===== מתג ראש (Dark/Light) ===== */
+.theme-toggle {
+  background: rgba(255, 255, 255, 0.16);
+  border: 0;
+  color: #fff;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+  margin-inline-start: 8px;
+  transition: background 0.15s;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.28); }
+
+/* ===== מתג מצב חיפוש (מדויק / חכם) ===== */
+.mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.mode-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.mode-toggle button.active {
+  background: var(--panel);
+  color: var(--brand);
+  box-shadow: var(--elev-1);
+}
+
+/* ===== השלמה אוטומטית (תיבת חיפוש ראשית) ===== */
+.search-field { position: relative; }
+.autocomplete {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline: 0;
+  z-index: 30;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--elev-2);
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.ac-item {
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--table-zone);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: var(--fs-2);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-item:last-child { border-bottom: 0; }
+.ac-item:hover { background: var(--hover); color: var(--brand); }
+
+/* ===== הדגשת התאמות ===== */
+mark.hl { background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 1px; }
+
+/* ===== שורת וריאנט נבחרת ===== */
+.variant-row.active {
+  background: var(--table-head);
+  box-shadow: inset 2px 0 0 var(--brand-2);
+}
+
+/* ===== סקלטוני טעינה ===== */
+.skeleton-list { display: flex; flex-direction: column; gap: 10px; }
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.sk {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--hover) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: sk-shimmer 1.3s ease infinite;
+  border-radius: 6px;
+  height: 14px;
+}
+.sk-badge { width: 60px; height: 26px; }
+.sk-line { flex: 1; }
+.sk-chip { width: 70px; }
+@keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* ===== backlog נרדפות (אדמין) ===== */
+.backlog-row { display: flex; align-items: center; gap: 8px; }
+.backlog-row input { flex: 1; }

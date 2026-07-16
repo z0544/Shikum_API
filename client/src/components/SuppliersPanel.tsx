@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import type { Supplier } from '../api/types';
+import { Icon } from './icons';
 
 /** שדות ספק נוספים שנחשפים בהרחבת שורת הספק (כולם כבר מגיעים מה-API). */
 const SUPPLIER_DETAIL: [keyof Supplier, string][] = [
@@ -35,7 +36,6 @@ export function SuppliersPanel({
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
-  const [allOpen, setAllOpen] = useState(false);
 
   function toggle(id: string) {
     setExpanded((prev) => {
@@ -72,15 +72,6 @@ export function SuppliersPanel({
       <div className="panel-head">
         <h2>{title}</h2>
         <div className="panel-head-actions">
-          {suppliers.length > 0 && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setAllOpen((v) => !v)}
-              title="הצג/הסתר את כל שדות הספקים"
-            >
-              {allOpen ? '▲ הסתר שדות' : '▼ הצג את כל השדות'}
-            </button>
-          )}
           <span className="count-pill">
             {query ? `${filtered.length} / ${suppliers.length}` : suppliers.length}
           </span>
@@ -114,7 +105,7 @@ export function SuppliersPanel({
                 </thead>
                 <tbody>
                   {filtered.map((s) => {
-                    const open = allOpen || expanded.has(s.modSupplierId);
+                    const open = expanded.has(s.modSupplierId);
                     const details = SUPPLIER_DETAIL.filter(([k]) => {
                       const v = s[k];
                       return v !== null && v !== undefined && v !== '';
@@ -131,7 +122,9 @@ export function SuppliersPanel({
                           <td>{phone(s)}</td>
                           <td>{s.profession || '—'}</td>
                           <td className="sup-caret">
-                            {details.length ? (open ? '▲' : '▼') : ''}
+                            {details.length ? (
+                              <Icon name={open ? 'chevron-up' : 'chevron-down'} />
+                            ) : null}
                           </td>
                         </tr>
                         {open && (

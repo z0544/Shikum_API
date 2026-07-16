@@ -1,7 +1,8 @@
 import { useApp } from '../state/AppContext';
+import { Icon } from './icons';
 
 export function Header() {
-  const { view, setView } = useApp();
+  const { view, setView, theme, toggleTheme } = useApp();
   return (
     <header className="header">
       <div className="header-bar">
@@ -20,9 +21,17 @@ export function Header() {
             ניהול וטעינת נתונים
           </button>
         </nav>
-        <div className="home-box" title="דף הבית" onClick={() => setView('search')}>
-          ⌂
-        </div>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'מצב בהיר' : 'מצב כהה'}
+          aria-label={theme === 'dark' ? 'עבור למצב בהיר' : 'עבור למצב כהה'}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+        </button>
+        <button className="home-box" title="דף הבית" aria-label="דף הבית" onClick={() => setView('search')}>
+          <Icon name="home" />
+        </button>
       </div>
     </header>
   );

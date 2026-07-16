@@ -62,6 +62,13 @@ export class CatalogController {
     return { catalogNumber: makt, count: suppliers.length, suppliers };
   }
 
+  /** מחזיר את קוד השירות (מחירון) של המק"ט, או serviceCode=null אם אין. */
+  @Get('api/makt/:makt/service-code')
+  async serviceCodeByMakt(@Param('makt') makt: string) {
+    if (!makt || !makt.trim()) throw new BadRequestException('נדרש מספר מק"ט');
+    return this.catalog.getServiceCodeForMakt(makt);
+  }
+
   // --- Legacy endpoints (תאימות לאחור) ---
   @Get('items')
   async legacyItems(

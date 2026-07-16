@@ -38,11 +38,22 @@ interface AppState {
   setAdminToken: (t: string) => void;
   toast: ToastState | null;
   showToast: (message: string, kind?: ToastState['kind']) => void;
+  theme: Theme;
+  toggleTheme: () => void;
 }
+
+type Theme = 'light' | 'dark';
 
 const AppContext = createContext<AppState | null>(null);
 
 const TOKEN_KEY = 'shikum_admin_token';
+const THEME_KEY = 'shikum_theme';
+
+function initialTheme(): Theme {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === 'light' || saved === 'dark') return saved;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 /** פענוח ה-hash ל-route. פורמט: #/search · #/admin · #/variant · #/variant/<entityId>. */
 function parseHash(): Route {
@@ -78,7 +89,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem(TOKEN_KEY) || '',
   );
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const timer = useRef<number>();
+
+  // החלת ערכת הנושא על שורש המסמך + שמירה מקומית.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   // ה-hash הוא מקור האמת היחיד לניווט — כל שינוי בו מסונכרן ל-state.
   useEffect(() => {
@@ -124,6 +146,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAdminToken,
         toast,
         showToast,
+        theme,
+        toggleTheme,
       }}
     >
       {children}

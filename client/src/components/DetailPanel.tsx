@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import type { ItemDetail } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { SuppliersPanel } from './SuppliersPanel';
+import { Icon } from './icons';
 
 const FIELD_LABELS: [keyof ItemDetail, string][] = [
   ['catalogNumber', 'מק"ט'],
@@ -17,7 +18,13 @@ const FIELD_LABELS: [keyof ItemDetail, string][] = [
   ['maxQuantity', 'כמות מירבית'],
 ];
 
-export function DetailPanel({ entityId }: { entityId: string | null }) {
+export function DetailPanel({
+  entityId,
+  onLoaded,
+}: {
+  entityId: string | null;
+  onLoaded?: (item: ItemDetail) => void;
+}) {
   const { showToast } = useApp();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +40,11 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
     setShowHistory(false);
     api
       .getItem(entityId)
-      .then((d) => alive && setItem(d))
+      .then((d) => {
+        if (!alive) return;
+        setItem(d);
+        onLoaded?.(d);
+      })
       .catch((e) => {
         if (alive) showToast(e instanceof ApiError ? e.message : 'שגיאה בטעינת הפריט', 'error');
       })
@@ -50,7 +61,17 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
       </div>
     );
   }
-  if (loading) return <div className="card loading-row">טוען פרטים…</div>;
+  if (loading)
+    return (
+      <div className="card">
+        <div className="skeleton-list" aria-hidden="true">
+          <span className="sk sk-line" style={{ width: '60%', height: 20 }} />
+          {[0, 1, 2, 3].map((i) => (
+            <span className="sk sk-line" key={i} />
+          ))}
+        </div>
+      </div>
+    );
   if (!item) return null;
 
   const suppliers = item.authorized_suppliers || [];
@@ -75,10 +96,14 @@ export function DetailPanel({ entityId }: { entityId: string | null }) {
             );
           })}
         </div>
-        {item.special_note && <div className="note">⚠ {item.special_note}</div>}
+        {item.special_note && (
+          <div className="note">
+            <Icon name="warning" /> {item.special_note}
+          </div>
+        )}
         <div className="smart-actions">
           <a className="btn btn-green btn-sm" href={api.exportMaktUrl(item.catalogNumber, item.entityId)}>
-            ⬇ ייצוא מק"ט + ספקים (Excel)
+            <Icon name="download" /> ייצוא מק"ט + ספקים (Excel)
           </a>
           {item.change_history.length > 0 && (
             <button className="btn btn-ghost btn-sm" onClick={() => setShowHistory((s) => !s)}>

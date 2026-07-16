@@ -64,6 +64,12 @@ export const api = {
     return handle(await fetch(`/api/makt/${encodeURIComponent(makt)}/suppliers`));
   },
 
+  async getServiceCode(
+    makt: string,
+  ): Promise<{ catalogNumber: string; serviceCode: string | null }> {
+    return handle(await fetch(`/api/makt/${encodeURIComponent(makt)}/service-code`));
+  },
+
   async aiSearch(query: string): Promise<AiSearchResponse> {
     return handle<AiSearchResponse>(
       await fetch('/api/ai/search', {

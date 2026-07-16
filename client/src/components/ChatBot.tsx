@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { AiResult, ChatContext, Supplier } from '../api/types';
 import { useApp } from '../state/AppContext';
+import { Icon } from './icons';
 
 interface Msg {
   id: number;
@@ -9,9 +10,13 @@ interface Msg {
   text?: string;
   results?: AiResult[];
   suppliers?: Supplier[];
+  unmatchedCodes?: string[];
 }
 
 type Intent = 'search' | 'suppliers' | 'contact';
+
+/** יעד הדיווח על קודים שלא נמצאו במאגר (כרגע דרך מייל). */
+const REPORT_EMAIL = 'yehudakri@gmail.com';
 
 const GREETING =
   'שלום! 👋 אני העוזר החכם של מערכת השיקום. ספרו לי מה הבעיה או הצורך ואשאל שאלות כדי להבין במה לעזור.\nאם יש לכם מסמך הפניה — אפשר לצרף אותו (📎) ואזהה ממנו איזה שירות דרוש.';
@@ -44,6 +49,22 @@ function phoneOf(s: Supplier) {
 function navUrl(s: Supplier) {
   const q = [s.street, s.city].filter(Boolean).join(' ');
   return `https://waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes`;
+}
+
+/** בונה גוף מייל מסודר לדיווח על קודים שאינם קיימים במאגר. */
+function buildReportBody(codes: string[]): string {
+  return [
+    'שלום,',
+    '',
+    'במהלך שימוש בעוזר החכם של מערכת השיקום זוהו קודי שירות/הפניה שאינם קיימים במאגר:',
+    '',
+    ...codes.map((c, i) => `${i + 1}. קוד: ${c}`),
+    '',
+    `סה"כ קודים לא קיימים: ${codes.length}`,
+    `תאריך הדיווח: ${new Date().toLocaleString('he-IL')}`,
+    '',
+    'נשלח אוטומטית מהעוזר החכם.',
+  ].join('\n');
 }
 
 /** מזרים טקסט מילה-מילה (~25ms/מילה) — הזרמה מדומה של תשובת העוזר. */
@@ -86,6 +107,7 @@ export function ChatBot() {
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [pendingIntent, setPendingIntent] = useState<Intent | null>(null);
   const [catalogCount, setCatalogCount] = useState<number | null>(null);
+  const [reportCodes, setReportCodes] = useState<string[] | null>(null);
   const idRef = useRef(0);
   const bodyRef = useRef<HTMLDivElement>(null);
   const suggestTimer = useRef<number>();
@@ -140,7 +162,12 @@ export function ChatBot() {
     try {
       const res = await api.chat(q, ctxOverride ?? ctx);
       setCtx(res.context || {});
-      pushBot({ text: res.reply, results: res.results, suppliers: res.suppliers });
+      pushBot({
+        text: res.reply,
+        results: res.results,
+        suppliers: res.suppliers,
+        unmatchedCodes: res.unmatchedCodes,
+      });
       setQuick(res.quickReplies || []);
     } catch (e) {
       pushBot({ text: e instanceof ApiError ? e.message : 'אירעה שגיאה. נסו שוב.' });
@@ -163,7 +190,12 @@ export function ChatBot() {
     try {
       const res = await api.chatDocument(file, ctx);
       setCtx(res.context || {});
-      pushBot({ text: res.reply, results: res.results, suppliers: res.suppliers });
+      pushBot({
+        text: res.reply,
+        results: res.results,
+        suppliers: res.suppliers,
+        unmatchedCodes: res.unmatchedCodes,
+      });
       setQuick(res.quickReplies || []);
     } catch (e) {
       pushBot({ text: e instanceof ApiError ? e.message : 'לא הצלחתי לנתח את המסמך. נסו שוב.' });
@@ -199,6 +231,27 @@ export function ChatBot() {
     navigator.clipboard
       ?.writeText(phone)
       .then(() => showToast('הטלפון הועתק', 'ok'))
+      .catch(() => showToast('לא ניתן להעתיק', 'error'));
+  }
+
+  /** פותח את המודאל לדיווח על קוד/ים שלא נמצאו במאגר. */
+  function openReport(codes: string[]) {
+    setReportCodes(codes);
+  }
+
+  /** שולח את הדיווח כמייל (פותח את תוכנת המייל עם הפרטים ממולאים). */
+  function sendReportEmail(codes: string[]) {
+    const subject = `דיווח: קודי שירות שלא נמצאו במאגר (${codes.length})`;
+    const body = buildReportBody(codes);
+    window.location.href = `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setReportCodes(null);
+  }
+
+  /** העתקת פרטי הדיווח ללוח (חלופה לשליחה במייל). */
+  function copyReport(codes: string[]) {
+    navigator.clipboard
+      ?.writeText(buildReportBody(codes))
+      .then(() => showToast('פרטי הדיווח הועתקו', 'ok'))
       .catch(() => showToast('לא ניתן להעתיק', 'error'));
   }
 
@@ -250,10 +303,10 @@ export function ChatBot() {
               </span>
             </div>
             <button className="chat-new" onClick={newConversation} title="התחל שיחה חדשה">
-              ↺ שיחה חדשה
+              <Icon name="refresh" /> שיחה חדשה
             </button>
             <button className="chat-close" onClick={() => setOpen(false)} aria-label="סגור">
-              ✕
+              <Icon name="close" />
             </button>
           </div>
 
@@ -290,6 +343,11 @@ export function ChatBot() {
                             <span className="chat-result-title">{r.description || '—'}</span>
                           </div>
                           <div className="chat-result-meta">
+                            {r.match_type === 'exact_code' && (
+                              <span className="chip exact" title="קוד ההפניה מוביל ישירות לשירות זה">
+                                <Icon name="check" /> התאמה מדויקת לקוד ההפניה
+                              </span>
+                            )}
                             <span className="chip green">{r.supplier_count} ספקים</span>
                             {r.variants[0]?.catalogPricelistNum && (
                               <span className="chip amber">קוד שירות: {r.variants[0].catalogPricelistNum}</span>
@@ -367,6 +425,30 @@ export function ChatBot() {
                       ))}
                     </div>
                   )}
+
+                  {showCards && m.unmatchedCodes && m.unmatchedCodes.length > 0 && (
+                    <div className="chat-unmatched">
+                      <div className="chat-unmatched-title">
+                        <Icon name="warning" /> קודים שלא נמצאו במאגר:
+                      </div>
+                      {m.unmatchedCodes.map((code) => (
+                        <div className="chat-unmatched-row" key={code}>
+                          <span className="chip amber">{code}</span>
+                          <button className="chat-chip sm" onClick={() => openReport([code])}>
+                            דווח
+                          </button>
+                        </div>
+                      ))}
+                      {m.unmatchedCodes.length > 1 && (
+                        <button
+                          className="chat-chip sm chat-report-all"
+                          onClick={() => openReport(m.unmatchedCodes!)}
+                        >
+                          דווח על כל הקודים שלא נמצאו ({m.unmatchedCodes.length})
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -423,7 +505,7 @@ export function ChatBot() {
               title="צרף מסמך הפניה (PDF/תמונה)"
               aria-label="צרף מסמך הפניה"
             >
-              📎
+              <Icon name="attach" />
             </button>
             <input
               value={input}
@@ -445,8 +527,48 @@ export function ChatBot() {
         aria-label={open ? 'סגור עוזר חכם' : 'פתח עוזר חכם'}
         title="עוזר חכם"
       >
-        {open ? '✕' : '💬'}
+        <Icon name={open ? 'close' : 'chat'} />
       </button>
+
+      {reportCodes && (
+        <div className="chat-report-overlay" onClick={() => setReportCodes(null)}>
+          <div
+            className="chat-report-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="דיווח על קודים שלא נמצאו"
+          >
+            <div className="chat-report-head">
+              <h3>דיווח על קודים שלא נמצאו</h3>
+              <button className="chat-close" onClick={() => setReportCodes(null)} aria-label="סגור">
+                <Icon name="close" />
+              </button>
+            </div>
+            <p className="chat-report-sub">
+              הקודים הבאים חולצו ממסמך ההפניה אך אינם קיימים במאגר. הדיווח יישלח לטיפול מנהל המערכת.
+            </p>
+            <ul className="chat-report-list">
+              {reportCodes.map((c) => (
+                <li key={c}>
+                  <span className="chip amber">{c}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="chat-report-actions">
+              <button className="btn btn-primary btn-sm" onClick={() => sendReportEmail(reportCodes)}>
+                <Icon name="mail" /> שלח מייל
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => copyReport(reportCodes)}>
+                העתק פרטים
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setReportCodes(null)}>
+                ביטול
+              </button>
+            </div>
+            <p className="chat-report-foot">יישלח אל: {REPORT_EMAIL}</p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

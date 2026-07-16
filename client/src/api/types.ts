@@ -18,6 +18,8 @@ export interface Variant {
   catalogPricelistNum: string | null;
   history_count?: number;
   supplier_count?: number;
+  /** הוריאנט הזה הותאם בהתאמה מדויקת לקוד שירות/הפניה (ולא בחיפוש טקסט). */
+  isExactCodeMatch?: boolean;
 }
 
 export interface MaktGroup {
@@ -86,6 +88,10 @@ export interface AiResult {
   suppliers: Supplier[];
   nearest_supplier: Supplier | null;
   supplier_note: string | null;
+  /** 'exact_code' = הותאם ישירות מקוד שירות/הפניה; 'text' = חיפוש טקסט חופשי. */
+  match_type?: 'exact_code' | 'text';
+  /** קוד השירות שהוביל להתאמה המדויקת (כשקיים). */
+  matched_code?: string | null;
 }
 
 export interface AiSearchResponse {
@@ -110,6 +116,7 @@ export interface ChatContext {
   location?: string | null;
   history?: ChatTurn[];
   clarifyCount?: number;
+  lastQuery?: string | null;
 }
 
 export interface ChatResponse {
@@ -119,6 +126,8 @@ export interface ChatResponse {
   suppliers?: Supplier[];
   quickReplies?: string[];
   followup?: 'location' | null;
+  /** קודי שירות/הפניה שחולצו ממסמך אך אינם קיימים במאגר — לדיווח. */
+  unmatchedCodes?: string[];
   context: ChatContext;
 }
 

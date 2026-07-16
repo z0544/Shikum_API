@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { Breadcrumbs } from './Header';
 import { DetailPanel } from './DetailPanel';
+import { Icon } from './icons';
 
 /**
  * תצוגת וריאנט בודד ייעודית — נגישה ישירות דרך URL (#/variant/<entityId>)
@@ -10,10 +11,12 @@ import { DetailPanel } from './DetailPanel';
 export function VariantView() {
   const { variantId, openVariant, setView, showToast } = useApp();
   const [input, setInput] = useState(variantId ?? '');
+  const [catalogNumber, setCatalogNumber] = useState<string | null>(null);
 
   // סנכרון תיבת הקלט עם המזהה שב-URL (למשל בעת הגעה מ-deep-link).
   useEffect(() => {
     setInput(variantId ?? '');
+    setCatalogNumber(null);
   }, [variantId]);
 
   function go() {
@@ -21,11 +24,36 @@ export function VariantView() {
     if (id) openVariant(id);
   }
 
+  /**
+   * מעתיק קישור לדף הווריאנט. בגוף עשיר (מייל/וורד) מודבק כעוגן HTML שטקסט
+   * התצוגה שלו הוא המק"ט בלבד; בטקסט רגיל מודבק ה-URL המלא.
+   */
   async function copyLink() {
     const url = window.location.href;
+    const makt = catalogNumber ?? (variantId ? variantId.split('-')[0] : '');
+    const esc = (s: string) =>
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const html = `<a href="${esc(url)}">${esc(makt)}</a>`;
     try {
-      await navigator.clipboard.writeText(url);
-      showToast('הקישור הועתק', 'ok');
+      if (
+        navigator.clipboard &&
+        'write' in navigator.clipboard &&
+        typeof ClipboardItem !== 'undefined'
+      ) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([url], { type: 'text/plain' }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+      showToast(makt ? `הקישור למק"ט ${makt} הועתק` : 'הקישור הועתק', 'ok');
     } catch {
       // דפדפנים ללא הרשאת clipboard (למשל ללא HTTPS) — נפילה חלופה לבחירה ידנית.
       window.prompt('העתק את הקישור:', url);
@@ -54,11 +82,11 @@ export function VariantView() {
             </button>
             {variantId && (
               <button className="btn btn-green" onClick={copyLink} title="העתק קישור ישיר לווריאנט זה">
-                🔗 העתק קישור
+                <Icon name="link" /> העתק קישור
               </button>
             )}
             <button className="btn btn-ghost" onClick={() => setView('search')}>
-              ← חזרה לחיפוש
+              <Icon name="chevron-left" /> חזרה לחיפוש
             </button>
           </div>
           <p className="hint">
@@ -68,7 +96,7 @@ export function VariantView() {
         </section>
 
         {variantId ? (
-          <DetailPanel entityId={variantId} />
+          <DetailPanel entityId={variantId} onLoaded={(it) => setCatalogNumber(it.catalogNumber)} />
         ) : (
           <section className="card">
             <p className="empty-state">הזן מזהה וריאנט למעלה כדי להציג את הפרטים</p>

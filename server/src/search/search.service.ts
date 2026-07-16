@@ -43,6 +43,8 @@ export interface ChatContext {
   history?: ChatTurn[];
   /** מונה שאלות הבהרה רצופות — למניעת לולאת הבהרות. */
   clarifyCount?: number;
+  /** השאילתה האחרונה שהניבה תוצאות — עוגן הקשר לשמירה על אותו מוצר בהמשך השיחה. */
+  lastQuery?: string | null;
 }
 
 /** מספר התורות המרבי שנשמר בהיסטוריה. */
@@ -57,6 +59,8 @@ export interface ChatResponse {
   suppliers?: Record<string, unknown>[];
   quickReplies?: string[];
   followup?: 'location' | null;
+  /** קודי שירות/הפניה שחולצו ממסמך אך אינם קיימים במאגר — לדיווח מהלקוח. */
+  unmatchedCodes?: string[];
   context: ChatContext;
 }
 
@@ -354,6 +358,10 @@ export class SearchService {
       matchTerms = await this.expandTerms(terms, phrase);
       const minScore = this.minRelevanceScore(terms, phrase);
       smartItems = await this.searchItemsSmart(matchTerms, phrase, minScore, itemLimit);
+      // fallback עמיד-לשגיאות: אם ה-contains לא מצא דבר, ננסה דמיון טריגרמים (pg_trgm).
+      if (!smartItems.length) {
+        smartItems = await this.catalog.searchByTrigram(phrase || terms.join(' '), itemLimit);
+      }
     }
 
     // מיזוג — התאמות קוד תחילה, ללא כפילויות
@@ -371,6 +379,7 @@ export class SearchService {
     }
 
     const codeMakats = new Set(codeItems.map((i) => String(i.catalogNumber)));
+    const codeVariantIds = new Set(codeItems.map((i) => i.entityId));
     const groups = await this.catalog.groupByMakt(items as any);
     groups.sort((a, b) => {
       // התאמות קוד שירות / מק"ט קודמות תמיד
@@ -398,14 +407,21 @@ export class SearchService {
       const suppliers = await this.catalog.getSuppliersForMakt(g.catalogNumber);
       const ranked = this.geo.rankSuppliers(userCity, suppliers as any);
       const nearest = ranked.find((s) => s.is_nearest) ?? null;
+      const variants = g.variants.map((v: any) => ({
+        ...v,
+        isExactCodeMatch: codeVariantIds.has(v.entityId),
+      }));
+      const exactVariant = variants.find((v) => v.isExactCodeMatch) ?? null;
       results.push({
         catalogNumber: g.catalogNumber,
         description: g.description ?? g.variants[0]?.description ?? null,
         variant_count: g.variant_count,
         supplier_count: ranked.length,
-        variants: g.variants,
+        variants,
         suppliers: ranked,
         nearest_supplier: nearest,
+        match_type: exactVariant ? 'exact_code' : 'text',
+        matched_code: exactVariant?.catalogPricelistNum ?? null,
         supplier_note:
           g.variant_count > 1 ? 'ספקים מורשים למק״ט — זהים לכל הוריאנטים' : null,
       });
@@ -619,7 +635,10 @@ export class SearchService {
     if (this.gemini.isEnabled() && !ctx.awaitingLocation) {
       try {
         const clarifyCount = ctx.clarifyCount ?? 0;
-        const u = await this.understand(message, history);
+        const u = await this.understand(message, history, {
+          product: ctx.lastQuery ?? ctx.product ?? null,
+          makat: ctx.makat ?? null,
+        });
         // ממשיכים לשאול הבהרה רק אם עדיין לא הצטבר מספיק מידע ולא חצינו את התקרה.
         if (u?.action === 'clarify' && u.question && clarifyCount < MAX_CLARIFY) {
           ctx.clarifyCount = clarifyCount + 1;
@@ -656,6 +675,8 @@ export class SearchService {
     base.context = base.context || ctx;
     base.context.history = this.appendHistory(history, message, base.reply);
     base.context.clarifyCount = 0;
+    // עוגן הקשר: זוכרים את השאילתה שהניבה תוצאות כדי לשמור על אותו מוצר בהמשך השיחה.
+    if (base.results?.length) base.context.lastQuery = query;
     return base;
   }
 
@@ -685,17 +706,26 @@ export class SearchService {
   private async understand(
     message: string,
     history: ChatTurn[] = [],
+    anchor: { product?: string | null; makat?: string | null } = {},
   ): Promise<{ action: 'clarify' | 'search'; question?: string; query?: string; suggestions?: string[] } | null> {
     const systemInstruction = [
       'אתה שכבת ההבנה של עוזר חכם לאגף השיקום, שמסייע למצוא מוצרי ושירותי שיקום (ניידות, שמיעה, ראייה, טיפולים, אביזרים ועוד).',
       'התחשב בכל היסטוריית השיחה שסופקה — אל תשאל שוב על מידע שהמשתמש כבר נתן. צבור את מה שנאמר עד כה לכדי צורך אחד.',
       'החלט אם יש כבר מספיק מידע לזהות מוצר/שירות שיקומי לחיפוש (action="search"), או שחסר מידע מהותי בלבד ואז שאל שאלת הבהרה אחת וקצרה (action="clarify").',
       'אם המשתמש כבר ציין תחום/מוצר/שירות (גם על פני כמה הודעות, למשל "גרון" ואז "בדיקת רופא") — אל תשאל שוב, אלא action="search" עם query שמגלם את מלוא הצורך (למשל "רופא אף אוזן גרון" או "בדיקת גרון").',
+      'חשוב מאוד ליציבות: אם כבר זוהה מוצר/שירות בשיחה (ראה "ההקשר המבוסס"), והמשתמש רק מוסיף פרט (מיקום, כמות, זמן) או שואל המשך על אותו צורך — שמור על אותו מוצר בדיוק ב-query. אל תחליף את המוצר או תרחיב אותו אלא אם המשתמש ביקש במפורש מוצר/שירות אחר.',
       'במקרה clarify: שאלה קצרה, אמפתית, בעברית, ללא חזרה על מה שכבר נשאל, עם 2-4 הצעות קצרות ב-suggestions.',
       'תמיד מלא גם את השדה query עם ההערכה הטובה ביותר לצורך הנוכחי (בעברית), גם כאשר action="clarify".',
       'החזר JSON בלבד: {"action":"clarify"|"search","question":string,"query":string,"suggestions":string[]}',
     ].join(' ');
+    const anchorText =
+      anchor.product || anchor.makat
+        ? `המוצר/שירות שכבר זוהה: "${anchor.product ?? ''}"${anchor.makat ? ` (מק"ט מוביל: ${anchor.makat})` : ''}`
+        : '(עדיין לא זוהה מוצר בשיחה)';
     const prompt = [
+      'ההקשר המבוסס עד כה:',
+      anchorText,
+      '',
       'היסטוריית השיחה עד כה:',
       this.historyText(history),
       '',
@@ -726,15 +756,17 @@ export class SearchService {
       'אתה מנתח מסמכי הפניה/מרשמים רפואיים בתחום השיקום.',
       'קרא את המסמך וחלץ מהו המוצר או השירות השיקומי שהאדם זקוק לו.',
       'summary = משפט תמציתי בעברית שמסביר מה עולה מהמסמך. query = ביטוי חיפוש קצר בעברית למוצר/שירות. found = האם זוהה צורך ברור.',
-      'הסתמך אך ורק על תוכן המסמך. אל תמציא. החזר JSON בלבד: {"found":boolean,"query":string,"summary":string}',
+      'serviceCodes = מערך של כל קודי ההפניה / קודי השירות / קודי המחירון שמופיעים במסמך (מספריים או אלפאנומריים, למשל "12345" או "T7825"), בדיוק כפי שהם. אם אין אף קוד — מערך ריק []. אל תנחש ואל תמציא קודים.',
+      'הסתמך אך ורק על תוכן המסמך. אל תמציא. החזר JSON בלבד: {"found":boolean,"query":string,"summary":string,"serviceCodes":string[]}',
     ].join(' ');
     const prompt =
-      'לפניך מסמך הפניה בתחום השיקום. חלץ את השירות/המוצר הנדרש והחזר JSON כפי שהוגדר.';
+      'לפניך מסמך הפניה בתחום השיקום. חלץ את השירות/המוצר הנדרש ואת כל קודי השירות המופיעים בו, והחזר JSON כפי שהוגדר.';
 
     const { data: analysis, error } = await this.gemini.analyzeDocumentJson<{
       found?: boolean;
       query?: string;
       summary?: string;
+      serviceCodes?: string[];
     }>(systemInstruction, prompt, {
       mimeType: file.mimetype,
       data: file.buffer.toString('base64'),
@@ -753,7 +785,9 @@ export class SearchService {
       };
     }
 
-    if (!analysis || !analysis.query || analysis.found === false) {
+    const rawCodes = Array.isArray(analysis?.serviceCodes) ? analysis!.serviceCodes! : [];
+    const uniqueCodes = [...new Set(rawCodes.map((c) => String(c).trim()).filter(Boolean))];
+    if (!analysis || (!analysis.query && !uniqueCodes.length) || analysis.found === false) {
       return {
         intent: 'search',
         context: ctx,
@@ -764,11 +798,31 @@ export class SearchService {
       };
     }
 
+    // מפרידים בין קודים שנמצאו במאגר (התאמה מדויקת) לבין קודים שאינם קיימים (לדיווח).
+    const foundCodes: string[] = [];
+    const unmatchedCodes: string[] = [];
+    for (const c of uniqueCodes) {
+      const items = await this.searchByCode(c);
+      if (items.length) foundCodes.push(c);
+      else {
+        unmatchedCodes.push(c);
+        void this.logUnanswered(c);
+      }
+    }
+
     const history: ChatTurn[] = Array.isArray(ctx.history) ? [...ctx.history] : [];
-    const base = await this.chatLocal(analysis.query, ctx);
+    // עדיפות לקודים שנמצאו (התאמה מדויקת). אם אף קוד לא נמצא — נופלים לחיפוש הטקסטואלי.
+    let base: ChatResponse | null = null;
+    if (foundCodes.length) {
+      const codeRes = await this.runAiSearch(foundCodes.join(' '));
+      if (codeRes.count) base = this.searchReply(codeRes, ctx);
+    }
+    if (!base) base = await this.chatLocal(analysis.query || foundCodes.join(' '), ctx);
+
+    const query = analysis.query || foundCodes.join(' ') || uniqueCodes.join(' ');
     try {
       const aiReply = await this.aiReply(
-        `על סמך מסמך הפניה. סיכום המסמך: ${analysis.summary ?? ''}. הצורך שזוהה: ${analysis.query}`,
+        `על סמך מסמך הפניה. סיכום המסמך: ${analysis.summary ?? ''}. הצורך שזוהה: ${query}`,
         base,
         history,
       );
@@ -776,7 +830,19 @@ export class SearchService {
     } catch (e) {
       this.logger.warn(`שכבת AI נכשלה בניתוח מסמך: ${(e as Error).message}`);
     }
-    const prefix = analysis.summary?.trim() ? `מהמסמך הבנתי: ${analysis.summary.trim()}\n\n` : '';
+    if (unmatchedCodes.length) base.unmatchedCodes = unmatchedCodes;
+
+    const exactMatched = (base.results ?? []).some((r) => (r as any).match_type === 'exact_code');
+    const codeLine =
+      exactMatched && foundCodes.length
+        ? `קוד ההפניה ${foundCodes.join(', ')} מוביל ישירות לשירות זה.\n`
+        : '';
+    const notFoundLine = unmatchedCodes.length
+      ? `שימו לב: הקודים הבאים לא נמצאו במאגר — ${unmatchedCodes.join(', ')}. ניתן לדווח עליהם למטה.\n`
+      : '';
+    const summaryLine = analysis.summary?.trim() ? `מהמסמך הבנתי: ${analysis.summary.trim()}\n` : '';
+    const prefix =
+      summaryLine || codeLine || notFoundLine ? `${summaryLine}${codeLine}${notFoundLine}\n` : '';
     base.reply = prefix + base.reply;
     base.context = base.context || ctx;
     base.context.history = this.appendHistory(
@@ -951,9 +1017,9 @@ export class SearchService {
         intent: 'search',
         context: ctx,
         followup: 'location',
-        reply: `מצאתי ${res.total_makts} מק"טים לגבי "${terms}". באיזה יישוב אתם? כך אאתר את הספק הקרוב ביותר. (אפשר "דלג")`,
+        reply: `מצאתי ${res.total_makts} מק"טים לגבי "${terms}". באיזה יישוב אתם? כך אאתר את הספק הקרוב ביותר.`,
         results: res.results.slice(0, 4),
-        quickReplies: ['דלג'],
+        quickReplies: [],
       };
     }
     return this.searchReply(res, ctx);

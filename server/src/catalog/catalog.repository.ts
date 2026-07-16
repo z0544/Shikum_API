@@ -84,6 +84,30 @@ export class CatalogRepository {
     });
   }
 
+  /**
+   * חיפוש עמיד-לשגיאות לפי דמיון טריגרמים (pg_trgm) על התיאור — מדורג לפי דמיון.
+   * מחזיר [] אם ההרחבה אינה זמינה, כדי שהקורא ייפול לחיפוש רגיל.
+   */
+  async searchByTrigram(query: string, limit: number): Promise<CatalogItem[]> {
+    const q = (query || '').trim();
+    if (q.length < 2) return [];
+    try {
+      const rows = await this.prisma.$queryRaw<{ id: number }[]>`
+        SELECT id FROM catalog_items
+        WHERE is_deleted = false AND description % ${q}
+        ORDER BY similarity(description, ${q}) DESC
+        LIMIT ${limit}
+      `;
+      const ids = rows.map((r) => Number(r.id));
+      if (!ids.length) return [];
+      const items = await this.prisma.catalogItem.findMany({ where: { id: { in: ids } } });
+      const order = new Map(ids.map((id, i) => [id, i]));
+      return items.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    } catch {
+      return [];
+    }
+  }
+
   /** מפת מק"ט -> מספר ספקים ייחודיים (הסכם פעיל + ספק קיים). */
   async supplierCountsForMakts(makts: string[]): Promise<Record<string, number>> {
     const unique = [...new Set(makts.map((m) => normalizeCatalogNumber(m)).filter(Boolean))];
