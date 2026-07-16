@@ -74,6 +74,9 @@ export function SearchView() {
   const [groups, setGroups] = useState<UniGroup[] | null>(null);
   const [meta, setMeta] = useState<Meta>({ count: 0 });
   const [searchedQuery, setSearchedQuery] = useState('');
+  // הפרמטרים שבהם רצה החיפוש הנוכחי — כדי שקישור הייצוא יתאים לתוצאות המוצגות
+  // גם אם המשתמש שינה את המצב/השדה מבלי לחפש מחדש.
+  const [resultParams, setResultParams] = useState<{ mode: Mode; match: string; field: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [suggests, setSuggests] = useState<string[]>([]);
@@ -132,10 +135,12 @@ export function SearchView() {
       }
       setGroups(uni);
       setSearchedQuery(term);
+      setResultParams({ mode: useMode, match, field });
       setExpanded(new Set(uni.slice(0, 1).map((g) => g.catalogNumber)));
     } catch (e) {
       setGroups([]);
       setMeta({ count: 0 });
+      setResultParams(null);
       const is404 = e instanceof ApiError && e.status === 404;
       showToast(e instanceof ApiError ? e.message : 'שגיאה בחיפוש', is404 ? 'info' : 'error');
     } finally {
@@ -152,10 +157,10 @@ export function SearchView() {
   }
 
   const exportHref =
-    groups && meta.count > 0
-      ? mode === 'smart'
+    resultParams && meta.count > 0
+      ? resultParams.mode === 'smart'
         ? api.exportAiUrl(searchedQuery)
-        : api.exportSearchUrl({ q: searchedQuery, match, field })
+        : api.exportSearchUrl({ q: searchedQuery, match: resultParams.match, field: resultParams.field })
       : null;
 
   return (

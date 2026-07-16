@@ -5,7 +5,6 @@ import type {
   ConfigMapRow,
   ItemDetail,
   SearchResponse,
-  Supplier,
   SynonymRow,
   SyncPlan,
   SyncRun,
@@ -56,12 +55,6 @@ export const api = {
 
   async getItem(entityId: string): Promise<ItemDetail> {
     return handle<ItemDetail>(await fetch(`/api/item/${encodeURIComponent(entityId)}`));
-  },
-
-  async getMaktSuppliers(
-    makt: string,
-  ): Promise<{ catalogNumber: string; count: number; suppliers: Supplier[] }> {
-    return handle(await fetch(`/api/makt/${encodeURIComponent(makt)}/suppliers`));
   },
 
   async getServiceCode(

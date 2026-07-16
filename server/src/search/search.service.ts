@@ -787,7 +787,9 @@ export class SearchService {
 
     const rawCodes = Array.isArray(analysis?.serviceCodes) ? analysis!.serviceCodes! : [];
     const uniqueCodes = [...new Set(rawCodes.map((c) => String(c).trim()).filter(Boolean))];
-    if (!analysis || (!analysis.query && !uniqueCodes.length) || analysis.found === false) {
+    // ממשיכים כל עוד יש ממה לחפש/לדווח (שאילתה או קודים) — גם אם found=false,
+    // כדי לא לאבד דיווח על קודים שחולצו אך אינם קיימים במאגר.
+    if (!analysis || (!analysis.query && !uniqueCodes.length)) {
       return {
         intent: 'search',
         context: ctx,
