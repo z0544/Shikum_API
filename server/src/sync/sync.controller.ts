@@ -48,10 +48,17 @@ export class SyncController {
 
   @Post('sync/:kind/apply')
   @UseInterceptors(FileInterceptor('file'))
-  async apply(@Param('kind') kind: string, @UploadedFile() file?: Express.Multer.File) {
+  async apply(
+    @Param('kind') kind: string,
+    @Query('force') force?: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file?.buffer?.length) throw new BadRequestException('לא הועלה קובץ');
+    const forced = force === 'true' || force === '1';
     try {
-      return await this.sync.apply(parseKind(kind), file.buffer, file.originalname || 'upload');
+      return await this.sync.apply(parseKind(kind), file.buffer, file.originalname || 'upload', {
+        force: forced,
+      });
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }

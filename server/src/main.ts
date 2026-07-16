@@ -19,14 +19,29 @@ async function bootstrap() {
     logger: ['log', 'warn', 'error'],
   });
 
-  // CORS — לפי ENV, ברירת מחדל פתוח לכול (תאימות לפיתוח)
-  const origins = (process.env.CORS_ORIGINS || '*').split(',').map((s) => s.trim());
-  const allowAll = origins.includes('*');
-  app.enableCors({
-    origin: allowAll ? true : origins,
-    credentials: !allowAll,
-    exposedHeaders: ['Content-Disposition'],
-  });
+  // CORS — רשימת מקורות מפורשת (CORS_ORIGINS) גוברת. ללא הגדרה: פתוח בפיתוח בלבד;
+  // בפרודקשן בקשות חוצות-מקור נחסמות (ה-Frontend מוגש מאותו origin ולכן אינו מושפע).
+  const corsRaw = process.env.CORS_ORIGINS?.trim();
+  const isProd = process.env.NODE_ENV === 'production';
+  if (corsRaw) {
+    const origins = corsRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const allowAll = origins.includes('*');
+    app.enableCors({
+      origin: allowAll ? true : origins,
+      credentials: !allowAll,
+      exposedHeaders: ['Content-Disposition'],
+    });
+  } else if (isProd) {
+    app.enableCors({ origin: false, exposedHeaders: ['Content-Disposition'] });
+    logger.warn(
+      'CORS_ORIGINS לא הוגדר בפרודקשן — בקשות חוצות-מקור נחסמות. הגדר CORS_ORIGINS לרשימת מקורות מותרים.',
+    );
+  } else {
+    app.enableCors({ origin: true, exposedHeaders: ['Content-Disposition'] });
+  }
 
   // ולידציה גלובלית ל-DTOs
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));

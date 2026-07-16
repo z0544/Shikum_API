@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   DefaultValuePipe,
@@ -55,12 +56,20 @@ export class AdminController {
 
   @Put('config-map')
   async upsertConfig(@Body() body: ConfigMapDto) {
-    return this.config.upsert(body.field, body.textValue, body.intValue);
+    try {
+      return await this.config.upsert(body.field, body.textValue, body.intValue);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
   }
 
   @Delete('config-map/:id')
   async deleteConfig(@Param('id', ParseIntPipe) id: number) {
-    return this.config.remove(id);
+    try {
+      return await this.config.remove(id);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
   }
 
   // --- שאילתות ללא מענה (backlog לנרדפות) ---

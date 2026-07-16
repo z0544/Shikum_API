@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CONFIG_FIELDS, ConfigMapService } from '../config-map/config-map.service';
+import { CONFIG_FIELDS, ConfigMapService, ConfigResolver } from '../config-map/config-map.service';
 import { GeoService } from '../geo/geo.service';
 import { buildEntityId, normalizeCatalogNumber, normalizeIntPart } from '../common/entity-id';
 import { dataFile } from '../common/paths';
@@ -59,10 +59,22 @@ export class EtlService {
     return map;
   }
 
-  /** ממיר רשומת פריט גולמית לשורת DB (כולל Variant ID מספרי). */
-  async buildItemRow(rec: RawRecord): Promise<Prisma.CatalogItemCreateManyInput> {
-    const entitledType = await this.config.toInt(CONFIG_FIELDS.ENTITLED_TYPE, rec['entitledTypeRaw']);
-    const amountType = await this.config.toInt(CONFIG_FIELDS.AMOUNT_TYPE, rec['amountTypeRaw']);
+  /** resolver לא-מתמיד לבניית שורות במצב preview (ללא רישום ערכי קונפיגורציה חדשים). */
+  previewResolver(): Promise<ConfigResolver> {
+    return this.config.previewResolver();
+  }
+
+  /**
+   * ממיר רשומת פריט גולמית לשורת DB (כולל Variant ID מספרי).
+   * resolver ברירת המחדל הוא המנוע המתמיד (רושם ערכים חדשים); ל-preview מעבירים resolver
+   * לא-מתמיד כדי שלא ייכתבו רשומות config חדשות.
+   */
+  async buildItemRow(
+    rec: RawRecord,
+    resolver: ConfigResolver = this.config,
+  ): Promise<Prisma.CatalogItemCreateManyInput> {
+    const entitledType = await resolver.toInt(CONFIG_FIELDS.ENTITLED_TYPE, rec['entitledTypeRaw']);
+    const amountType = await resolver.toInt(CONFIG_FIELDS.AMOUNT_TYPE, rec['amountTypeRaw']);
     const baseLevel = this.toLevelInt(rec['baseLevel']);
     const exceptionLevel = this.toLevelInt(rec['exceptionLevel']);
     // מק"ט קנוני (ללא אפסים מובילים) — כדי שיתלכד עם קובץ ההסכמים
@@ -201,21 +213,27 @@ export class EtlService {
       (r) => `${r.modSupplierId}|${r.catalogNumber}`,
     );
 
-    // כתיבה — ניקוי וטעינה מחדש
-    this.logger.log('מנקה טבלאות קיימות...');
-    await this.prisma.itemHistory.deleteMany();
-    await this.prisma.catalogItem.deleteMany();
-    await this.prisma.supplier.deleteMany();
-    await this.prisma.agreement.deleteMany();
+    // כתיבה — ניקוי וטעינה מחדש בטרנזקציה אחת: כשל באמצע עושה rollback ומשאיר
+    // את הנתונים הקודמים שלמים (במקום DB ריק/חלקי).
+    this.logger.log('מנקה וטוען מחדש (טרנזקציה)...');
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.itemHistory.deleteMany();
+        await tx.catalogItem.deleteMany();
+        await tx.supplier.deleteMany();
+        await tx.agreement.deleteMany();
 
-    await this.insertChunked('items', dedupedItems, (chunk) =>
-      this.prisma.catalogItem.createMany({ data: chunk }),
-    );
-    await this.insertChunked('suppliers', supplierRows, (chunk) =>
-      this.prisma.supplier.createMany({ data: chunk }),
-    );
-    await this.insertChunked('agreements', agreementRows, (chunk) =>
-      this.prisma.agreement.createMany({ data: chunk }),
+        await this.insertChunked('items', dedupedItems, (chunk) =>
+          tx.catalogItem.createMany({ data: chunk }),
+        );
+        await this.insertChunked('suppliers', supplierRows, (chunk) =>
+          tx.supplier.createMany({ data: chunk }),
+        );
+        await this.insertChunked('agreements', agreementRows, (chunk) =>
+          tx.agreement.createMany({ data: chunk }),
+        );
+      },
+      { maxWait: 15000, timeout: 300000 },
     );
 
     return {

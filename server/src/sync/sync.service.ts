@@ -27,6 +27,12 @@ export interface SyncPlan {
   unchanged_count: number;
 }
 
+/** ערכים המתנרמלים ל"ריק" בהשוואה. */
+const EMPTY_SENTINELS = ['nan', 'none', '<na>'];
+
+/** יחס מחיקות מרבי מותר ב-apply ללא אישור מפורש (הגנה מפני מחיקה המונית בטעות). */
+const DEFAULT_MAX_DELETE_RATIO = 0.3;
+
 /** שדות להשוואה בכל סוג קובץ (ללא מפתחות ומטא-דאטה). */
 const COMPARE_FIELDS: Record<FileKind, string[]> = {
   items: [
@@ -43,6 +49,7 @@ const COMPARE_FIELDS: Record<FileKind, string[]> = {
     'exceptionLevel',
     'exceptionPercent',
     'amount',
+    'catalogPricelistNum',
   ],
   suppliers: [
     'rehabSupplierId',
@@ -72,6 +79,8 @@ const COMPARE_FIELDS: Record<FileKind, string[]> = {
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
+  private readonly maxDeleteRatio =
+    Number(process.env.SYNC_MAX_DELETE_RATIO) || DEFAULT_MAX_DELETE_RATIO;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -84,7 +93,13 @@ export class SyncService {
     if (v === null || v === undefined) return '';
     if (typeof v === 'boolean') return v ? '1' : '0';
     const s = String(v).trim();
-    if (['nan', 'none', '<na>'].includes(s.toLowerCase())) return '';
+    if (EMPTY_SENTINELS.includes(s.toLowerCase())) return '';
+    // נרמול ערכים מספריים כדי שהבדלי פורמט בלבד (פסיקים, "1.0" מול "1") לא ייחשבו שינוי
+    const numeric = s.replace(/,/g, '');
+    if (/^-?\d+(\.\d+)?$/.test(numeric)) {
+      const n = Number(numeric);
+      if (Number.isFinite(n)) return String(n);
+    }
     return s;
   }
 
@@ -101,15 +116,30 @@ export class SyncService {
     return { modSupplierId: row.modSupplierId, catalogNumber: row.catalogNumber };
   }
 
-  /** בונה מפת key -> שורת DB מהקובץ החדש (כולל dedup). */
-  private async buildKeyedRows(kind: FileKind, buffer: Buffer): Promise<Map<string, Record<string, any>>> {
+  /**
+   * בונה מפת key -> שורת DB מהקובץ החדש (כולל dedup).
+   * persist=false (preview) בונה פריטים דרך resolver לא-מתמיד, כך שערכי קונפיגורציה חדשים
+   * אינם נכתבים ל-DB בעת תצוגה מקדימה; persist=true (apply/רישום) רושם ערכים חדשים כרגיל.
+   */
+  private async buildKeyedRows(
+    kind: FileKind,
+    buffer: Buffer,
+    persist = true,
+  ): Promise<Map<string, Record<string, any>>> {
     const records = readKmsFile(buffer, kind);
     if (!records.length) throw new Error('הקובץ ריק או שלא זוהתה שורת כותרת מתאימה');
 
     const map = new Map<string, Record<string, any>>();
     if (kind === 'items') {
+      const resolver = persist ? undefined : await this.etl.previewResolver();
+      const pricelist = this.etl.loadPricelistMap();
       const rows: Awaited<ReturnType<EtlService['buildItemRow']>>[] = [];
-      for (const rec of records) rows.push(await this.etl.buildItemRow(rec));
+      for (const rec of records) {
+        const row = await this.etl.buildItemRow(rec, resolver);
+        const pl = pricelist.get(String(row.catalogNumber));
+        if (pl) row.catalogPricelistNum = pl;
+        rows.push(row);
+      }
       for (const row of this.etl.dedupeItems(rows)) map.set(this.keyOf(kind, row), row);
     } else if (kind === 'suppliers') {
       for (const rec of records) {
@@ -154,9 +184,21 @@ export class SyncService {
 
   /** מחשב תוכנית סנכרון ללא שינוי ב-DB (preview). */
   async computePlan(kind: FileKind, buffer: Buffer, filename: string): Promise<SyncPlan> {
-    const newRows = await this.buildKeyedRows(kind, buffer);
+    const newRows = await this.buildKeyedRows(kind, buffer, false);
     const existing = await this.loadExisting(kind);
+    return this.derivePlan(kind, filename, newRows, existing);
+  }
 
+  /**
+   * מסווג חדש/עודכן/הוסר מתוך המפות שכבר נבנו — טהור, ללא גישה ל-DB או לקובץ.
+   * כך apply בונה את המפות פעם אחת ומסתמך על אותה תוצאה, במקום לחשב מחדש.
+   */
+  private derivePlan(
+    kind: FileKind,
+    filename: string,
+    newRows: Map<string, Record<string, any>>,
+    existing: Map<string, Record<string, any>>,
+  ): SyncPlan {
     const plan: SyncPlan = {
       fileType: kind,
       filename,
@@ -224,11 +266,30 @@ export class SyncService {
     return tx.agreement.update({ where: { supplier_makt: { modSupplierId, catalogNumber } }, data });
   }
 
-  /** מיישם את תוכנית הסנכרון (apply) בטרנזקציה + רישום היסטוריה ו-SyncRun. */
-  async apply(kind: FileKind, buffer: Buffer, filename: string) {
-    const plan = await this.computePlan(kind, buffer, filename);
+  /**
+   * מיישם את תוכנית הסנכרון (apply) בטרנזקציה + רישום היסטוריה ו-SyncRun.
+   * בונה את המפות פעם אחת (ללא חישוב כפול) ומסרב לסנכרון שימחק מעל סף בטיחות
+   * מרשומות פעילות, אלא אם הועבר force=true (הגנה מפני העלאת קובץ חלקי בטעות).
+   */
+  async apply(
+    kind: FileKind,
+    buffer: Buffer,
+    filename: string,
+    options: { force?: boolean } = {},
+  ) {
     const newRows = await this.buildKeyedRows(kind, buffer);
     const existing = await this.loadExisting(kind);
+    const plan = this.derivePlan(kind, filename, newRows, existing);
+
+    const activeExisting = [...existing.values()].filter((r) => !r.isDeleted).length;
+    const deleteRatio = activeExisting > 0 ? plan.summary.deleted / activeExisting : 0;
+    if (!options.force && deleteRatio > this.maxDeleteRatio) {
+      throw new Error(
+        `סנכרון נחסם: הקובץ ימחק ${plan.summary.deleted} מתוך ${activeExisting} רשומות פעילות ` +
+          `(${Math.round(deleteRatio * 100)}%), מעל הסף המותר (${Math.round(this.maxDeleteRatio * 100)}%). ` +
+          `ודא שהעלית קובץ snapshot מלא ולא חלקי; לאישור מפורש שלח force=true.`,
+      );
+    }
 
     const run = await this.prisma.syncRun.create({
       data: { fileType: kind, filename, status: 'running' },
