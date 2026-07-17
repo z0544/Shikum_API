@@ -629,10 +629,18 @@ export class SearchService {
     const history: ChatTurn[] = Array.isArray(ctx.history) ? [...ctx.history] : [];
     let query = message;
 
-    // שלב הבנה (רק כש-AI פעיל ולא באמצע המתנה למיקום):
+    // כוונת "מי מספק?" / פרטי קשר על מוצר שכבר עוגן בשיחה (מק"ט/שאילתה אחרונה):
+    // מדלגים על שלב ההבהרה ומפעילים ישירות את שכבת הספקים המקומית (שמשתמשת ב-ctx.makat),
+    // כדי שלחיצה על "מי מספק?" תחזיר ספקים ולא תשאל שוב "לאיזה שירות".
+    const followupIntent = this.classifyIntent(message);
+    const hasAnchor = !!(ctx.makat || ctx.lastQuery || ctx.product);
+    const skipUnderstand =
+      (followupIntent === 'suppliers' || followupIntent === 'contact') && hasAnchor;
+
+    // שלב הבנה (רק כש-AI פעיל, לא באמצע המתנה למיקום, ולא בכוונת המשך-ספקים מעוגנת):
     // אם ההודעה מעורפלת / תיאור בעיה — נשאל שאלת הבהרה לפני שמחפשים מק"טים.
     // עם זיכרון שיחה: Gemini מקבל את ההיסטוריה כדי לא לשאול שוב על מה שכבר נאמר.
-    if (this.gemini.isEnabled() && !ctx.awaitingLocation) {
+    if (this.gemini.isEnabled() && !ctx.awaitingLocation && !skipUnderstand) {
       try {
         const clarifyCount = ctx.clarifyCount ?? 0;
         const u = await this.understand(message, history, {

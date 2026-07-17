@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 
-export type View = 'search' | 'admin' | 'variant';
+export type View = 'search' | 'admin' | 'variant' | 'api';
 
 interface ToastState {
   message: string;
@@ -80,12 +80,16 @@ function parseHash(): Route {
   if (seg === 'admin') {
     return { view: 'admin', variantId: null, searchQuery: null, popupVariant: null };
   }
+  if (seg === 'api') {
+    return { view: 'api', variantId: null, searchQuery: null, popupVariant: null };
+  }
   return { view: 'search', variantId: null, searchQuery: arg, popupVariant: null };
 }
 
 /** בניית ה-hash מתוך view + ארגומנט אופציונלי (מזהה וריאנט / שאילתת חיפוש). */
 function hashFor(view: View, arg?: string | null): string {
   if (view === 'admin') return '#/admin';
+  if (view === 'api') return '#/api';
   if (view === 'variant') {
     return arg ? `#/variant/${encodeURIComponent(arg)}` : '#/variant';
   }

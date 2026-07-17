@@ -2,6 +2,7 @@ import { Header } from './components/Header';
 import { SearchView } from './components/SearchView';
 import { VariantView } from './components/VariantView';
 import { AdminView } from './components/AdminView';
+import { ApiView } from './components/ApiView';
 import { Toast } from './components/Toast';
 import { ChatBot } from './components/ChatBot';
 import { VariantDialog } from './components/VariantDialog';
@@ -12,7 +13,15 @@ export function App() {
   return (
     <div className="app">
       <Header />
-      {view === 'search' ? <SearchView /> : view === 'variant' ? <VariantView /> : <AdminView />}
+      {view === 'search' ? (
+        <SearchView />
+      ) : view === 'variant' ? (
+        <VariantView />
+      ) : view === 'api' ? (
+        <ApiView />
+      ) : (
+        <AdminView />
+      )}
       <Toast />
       <ChatBot />
       {popupVariant && <VariantDialog entityId={popupVariant} />}

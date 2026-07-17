@@ -20,6 +20,9 @@ export function Header() {
           <button className={view === 'admin' ? 'active' : ''} onClick={() => setView('admin')}>
             ניהול וטעינת נתונים
           </button>
+          <button className={view === 'api' ? 'active' : ''} onClick={() => setView('api')}>
+            API
+          </button>
         </nav>
         <button
           className="theme-toggle"
