@@ -76,6 +76,17 @@ export class CatalogController {
     return this.catalog.getServiceCodeForMakt(makt);
   }
 
+  /**
+   * שירות API: מק"ט -> קוד הפניה מב"ר (=קוד השירות/מחירון). mabarCode=null אם אין.
+   * זהה בערכו ל-service-code, בשם מפורש לפי המונח מב"ר.
+   */
+  @Get('api/makt/:makt/mabar')
+  async mabarByMakt(@Param('makt') makt: string) {
+    if (!makt || !makt.trim()) throw new BadRequestException('נדרש מספר מק"ט');
+    const { catalogNumber, serviceCode } = await this.catalog.getServiceCodeForMakt(makt);
+    return { catalogNumber, mabarCode: serviceCode };
+  }
+
   // --- Legacy endpoints (תאימות לאחור) ---
   @Get('items')
   async legacyItems(

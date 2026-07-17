@@ -63,6 +63,11 @@ export const api = {
     return handle(await fetch(`/api/makt/${encodeURIComponent(makt)}/service-code`));
   },
 
+  /** מק"ט -> קוד הפניה מב"ר (=קוד השירות). */
+  async getMabar(makt: string): Promise<{ catalogNumber: string; mabarCode: string | null }> {
+    return handle(await fetch(`/api/makt/${encodeURIComponent(makt)}/mabar`));
+  },
+
   async aiSearch(query: string): Promise<AiSearchResponse> {
     return handle<AiSearchResponse>(
       await fetch('/api/ai/search', {

@@ -106,6 +106,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [resetSignal, setResetSignal] = useState(0);
   const timer = useRef<number>();
+  /** ה-hash האחרון שאינו חלון קופץ — היעד שאליו סגירת הפופאפ מחזירה (ה-SOURCE). */
+  const popupSource = useRef<string>('');
 
   // החלת ערכת הנושא על שורש המסמך + שמירה מקומית.
   useEffect(() => {
@@ -118,9 +120,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ה-hash הוא מקור האמת היחיד לניווט — כל שינוי בו מסונכרן ל-state.
+  // בכל מעבר לדף שאינו פופאפ שומרים אותו כ-SOURCE, כדי שסגירת הפופאפ תחזיר אליו.
   useEffect(() => {
-    const onHash = () => setRoute(parseHash());
+    const remember = (r: Route) => {
+      if (!r.popupVariant) popupSource.current = window.location.hash || hashFor('search');
+    };
+    const onHash = () => {
+      const r = parseHash();
+      remember(r);
+      setRoute(r);
+    };
     if (!window.location.hash) window.history.replaceState(null, '', hashFor('search'));
+    remember(parseHash());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -134,8 +145,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.location.hash = hashFor('search');
   }, []);
 
+  // סגירת פופאפ מחזירה ל-SOURCE שממנו הגענו (חיפוש עם שאילתה / וריאנט / אדמין),
+  // ולא לדף חיפוש ריק. אם אין מקור (הגעה ישירה מקישור) — נופלים לדף החיפוש.
   const closePopup = useCallback(() => {
-    window.location.hash = hashFor('search');
+    const source = popupSource.current;
+    window.location.hash = source && !source.startsWith('#/popup') ? source : hashFor('search');
   }, []);
 
   const openVariant = useCallback((entityId: string) => {

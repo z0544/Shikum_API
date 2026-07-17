@@ -873,22 +873,28 @@ export class SearchService {
       supplier_count: r.supplier_count,
       nearest_supplier: (r.nearest_supplier as { name?: string } | null)?.name ?? null,
     }));
-    const suppliers = (base.suppliers ?? []).slice(0, 6).map((s) => ({
+    const allSuppliers = base.suppliers ?? [];
+    const suppliers = allSuppliers.slice(0, 40).map((s) => ({
       name: (s as any).name ?? null,
       phone: (s as any).mobile || (s as any).workPhone || (s as any).landline || null,
       city: (s as any).city ?? null,
       profession: (s as any).profession ?? null,
       proximity: (s as any).proximity_label ?? null,
     }));
+    // רשימת השמות המלאה (קלה במשקל) — כדי שהמודל יוכל לאשר קיום ספק מסוים גם
+    // כאשר הוא מחוץ ל-40 המפורטים, ולא יטען בטעות שספק שקיים אינו ברשימה.
+    const supplier_names = allSuppliers.map((s) => (s as any).name).filter(Boolean);
 
-    const data = { intent: base.intent, results, suppliers };
-    const hasData = results.length > 0 || suppliers.length > 0;
+    const data = { intent: base.intent, results, suppliers, supplier_total: allSuppliers.length, supplier_names };
+    const hasData = results.length > 0 || allSuppliers.length > 0;
 
     const systemInstruction = [
       'אתה העוזר החכם של מערכת השיקום של אגף השיקום.',
       'ענה בעברית, בטון ידידותי, מקצועי ותמציתי (2-4 משפטים).',
       'הסתמך אך ורק על הנתונים שסופקו לך (JSON). אל תמציא מק"טים, ספקים, טלפונים או עובדות שאינן בנתונים.',
-      'אל תמציא מחירים או זמינות. אם אין נתונים, אמור זאת בכנות והצע לנסח מחדש או לבחור קטגוריה.',
+      'supplier_names היא רשימת כל הספקים המורשים למק"ט (המלאה); suppliers מפרט את 40 הראשונים. אם supplier_total>0 קיימים ספקים — לעולם אל תאמר שאין ספקים או שאין בית חולים/מרכז שמספק את השירות.',
+      'אם נשאלת אם ספק/בית חולים מסוים מספק את השירות — בדוק את שמו מול supplier_names (התאמה חלקית מספיקה); אם הוא מופיע, אשר זאת במפורש. אל תסנן ספקים לפי סוג (בית חולים/מכון/יחיד).',
+      'אל תמציא מחירים או זמינות. אם באמת אין נתונים (supplier_total=0 ואין תוצאות), אמור זאת בכנות והצע לנסח מחדש או לבחור קטגוריה.',
       'אל תחזור על רשימת התוצאות באופן מלא — הן מוצגות בכרטיסים נפרדים. סכם והכוון את המשתמש.',
       'אל תשתמש ב-Markdown, בכוכביות או בטבלאות — טקסט רגיל בלבד.',
     ].join(' ');
