@@ -5,6 +5,7 @@ import { ConfigMapModule } from './config-map/config-map.module';
 import { GeoModule } from './geo/geo.module';
 import { EtlModule } from './etl/etl.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { ProvidersModule } from './providers/providers.module';
 import { SearchModule } from './search/search.module';
 import { ExportModule } from './export/export.module';
 import { SyncModule } from './sync/sync.module';
@@ -20,6 +21,7 @@ import { RequestLoggerMiddleware } from './common/request-logger.middleware';
     GeoModule,
     EtlModule,
     CatalogModule,
+    ProvidersModule,
     SearchModule,
     ExportModule,
     SyncModule,

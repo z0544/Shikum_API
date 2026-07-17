@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, CatalogItem } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MatchMode, stringFilter } from './catalog.types';
-import { normalizeCatalogNumber } from '../common/entity-id';
+import { normalizeCatalogNumber, normalizeSupplierId } from '../common/entity-id';
 
 /** שכבת גישה לנתונים (Data Access Layer) לפריטים, הסכמים וספקים. */
 @Injectable()
@@ -142,6 +142,46 @@ export class CatalogRepository {
       orderBy: { name: 'asc' },
     });
     return suppliers.map((s) => ({ ...s, isActiveAgreement: activeById.get(s.modSupplierId) ?? true }));
+  }
+
+  /**
+   * מרכזים רפואיים/ספקים למק"ט — ספקי ההסכם, מועשרים מספריית myshikum
+   * (מקצוע, סיווג, גיאו, נגישות). נופל לנתוני Supplier כשאין רשומה בספרייה.
+   */
+  async institutionsForMakt(makt: string) {
+    const suppliers = await this.suppliersForMakt(makt);
+    if (!suppliers.length) return [];
+    const keys = [
+      ...new Set(suppliers.map((s) => normalizeSupplierId(s.rehabSupplierId)).filter(Boolean)),
+    ];
+    const dir = keys.length
+      ? await this.prisma.providerDirectory.findMany({
+          where: { isDeleted: false, rehabSupplierId: { in: keys } },
+        })
+      : [];
+    const byKey = new Map(dir.map((d) => [d.rehabSupplierId, d]));
+    return suppliers.map((s) => {
+      const d = byKey.get(normalizeSupplierId(s.rehabSupplierId));
+      return {
+        modSupplierId: s.modSupplierId,
+        rehabSupplierId: s.rehabSupplierId,
+        name: d?.name ?? s.name,
+        kind: d?.kind ?? null,
+        professions: d?.professions ?? (s.profession ? [s.profession] : []),
+        city: d?.city ?? s.city,
+        street: d?.street ?? s.street,
+        phone: d?.phone ?? s.mobile ?? s.workPhone ?? s.landline ?? null,
+        email: d?.email ?? s.email,
+        lat: d?.lat ?? null,
+        lng: d?.lng ?? null,
+        accessible: d?.accessible ?? null,
+        homeVisit: d?.homeVisit ?? null,
+        isActiveAgreement: s.isActiveAgreement,
+        basis: 'mod_agreement',
+        source: d ? d.source : 'agreement',
+        enriched: Boolean(d),
+      };
+    });
   }
 
   /** ספירת רשומות היסטוריה לכל מפתח. */

@@ -62,6 +62,13 @@ export class CatalogController {
     return { catalogNumber: makt, count: suppliers.length, suppliers };
   }
 
+  /** מרכזים רפואיים/ספקים שנותנים שירות למק"ט (הסכם + העשרה מ-myshikum). */
+  @Get('api/makt/:makt/institutions')
+  async institutionsByMakt(@Param('makt') makt: string) {
+    const institutions = await this.catalog.getInstitutionsForMakt(makt);
+    return { catalogNumber: makt, count: institutions.length, institutions };
+  }
+
   /** מחזיר את קוד השירות (מחירון) של המק"ט, או serviceCode=null אם אין. */
   @Get('api/makt/:makt/service-code')
   async serviceCodeByMakt(@Param('makt') makt: string) {

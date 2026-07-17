@@ -124,6 +124,11 @@ export class CatalogService {
     return this.repo.suppliersForMakt(makt);
   }
 
+  /** מרכזים רפואיים/ספקים שנותנים שירות למק"ט, מועשרים מספריית myshikum. */
+  async getInstitutionsForMakt(makt: string) {
+    return this.repo.institutionsForMakt(makt);
+  }
+
   /** חיפוש עמיד-לשגיאות לפי דמיון טריגרמים (pg_trgm) — fallback לחיפוש החכם. */
   async searchByTrigram(query: string, limit: number) {
     return this.repo.searchByTrigram(query, limit);

@@ -34,6 +34,20 @@ export function normalizeCatalogNumber(value: unknown): string {
   return s;
 }
 
+/**
+ * נרמול מספר ספק משהב"ט למפתח JOIN יציב: myshikum מרפד ל-6 ספרות ("000357")
+ * וקבצי ה-XLSX שומרים trimmed ("357"). נרמול לערך מספרי מיישר בין המקורות.
+ * ערך לא-מספרי מוחזר כפי שהוא (מנוקה).
+ */
+export function normalizeSupplierId(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const s = String(value).trim();
+  if (!s) return '';
+  const n = Number(s);
+  if (!Number.isNaN(n) && Number.isFinite(n) && Number.isInteger(n)) return String(n);
+  return s;
+}
+
 export interface EntityIdParts {
   catalogNumber: string | number;
   entitledType: number;

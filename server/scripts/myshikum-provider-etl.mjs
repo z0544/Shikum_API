@@ -43,8 +43,9 @@ function phone(s) {
   return p && n ? `${p}-${n}` : null;
 }
 
-// מפתח ה-JOIN: modSupplierId במאגר נשמר trimmed מה-XLSX; myshikum מרפד ל-6 ספרות.
-// נרמול לערך מספרי מבטיח התאמה ("000230" == "230").
+// מפתח ה-JOIN: ה-id ב-myshikum הוא מספר ספק השיקום (rehabSupplierId), לא ה-SAP בן 10 הספרות.
+// במאגר: הצטלבות מול Agreement.rehabSupplierId / Supplier.rehabSupplierId (לא modSupplierId!).
+// נרמול לערך מספרי מבטיח התאמה ("000357" == "357").
 export const joinKey = (id) => String(parseInt(String(id), 10));
 
 async function run() {
@@ -70,7 +71,7 @@ async function run() {
       const key = joinKey(s.id);
       const professions = (s.professions || []).map((p) => occ[p]).filter(Boolean);
       providers[key] = providers[key] || {
-        modSupplierId: key,
+        rehabSupplierId: key,
         rawId: s.id,
         name: String(s.name || '').trim(),
         categories: [],

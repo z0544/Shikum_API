@@ -1,6 +1,6 @@
 {
   "name": "shikum-api-server",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "SHIKUM_API backend (NestJS + Prisma)",
   "license": "MIT",
   "scripts": {
@@ -17,6 +17,8 @@
     "db:pg:status": "\"../.pg/pgsql/bin/pg_ctl.exe\" -D \"../.pg/data\" status",
     "etl": "ts-node -T src/etl/etl.cli.ts",
     "etl:prod": "node dist/etl/etl.cli.js",
+    "providers:sync": "ts-node -T src/providers/providers.cli.ts",
+    "providers:sync:prod": "node dist/providers/providers.cli.js",
     "db:deploy": "prisma db push --skip-generate && node dist/etl/etl.cli.js",
     "test": "jest",
     "test:watch": "jest --watch"

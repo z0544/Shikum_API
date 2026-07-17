@@ -89,6 +89,36 @@ model Agreement {
   @@map("agreements")
 }
 
+/// ספריית ספקים/מרכזים ציבורית של אגף השיקום (myshikum.mod.gov.il).
+/// rehabSupplierId מנורמל (numeric-string) = מפתח ה-JOIN מול Agreement/Supplier.
+/// (ה-id ב-myshikum הוא מספר ספק השיקום, לא מספר ה-SAP בן 10 הספרות.)
+model ProviderDirectory {
+  rehabSupplierId String @id @map("rehab_supplier_id")
+  rawId         String   @map("raw_id")
+  name          String   @map("name")
+  kind          String?  @map("kind") // hospital | institute | individual
+  categories    String[] @map("categories")
+  professions   String[] @map("professions")
+  city          String?  @map("city")
+  street        String?  @map("street")
+  zip           String?  @map("zip")
+  phone         String?  @map("phone")
+  email         String?  @map("email")
+  lat           Float?   @map("lat")
+  lng           Float?   @map("lng")
+  homeVisit     Boolean  @default(false) @map("home_visit")
+  accessible    Boolean  @default(false) @map("accessible")
+  source        String   @default("myshikum") @map("source")
+  isDeleted     Boolean  @default(false) @map("is_deleted")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([city])
+  @@index([isDeleted])
+  @@map("provider_directory")
+}
+
 /// מילון קונפיגורציה: מחרוזת -> ערך מספרי (ניתן לעריכה). למשל סוג זכאי 'נכים' -> 1.
 model ConfigMap {
   id        Int    @id @default(autoincrement())
