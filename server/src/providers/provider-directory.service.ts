@@ -10,7 +10,7 @@ const USER_AGENT = 'Shikum_API provider-directory ETL';
 const CATEGORIES: Array<{ category: string; queryName: string; resourceKey: string }> = [
   { category: 'doctors', queryName: 'specialty', resourceKey: 'doctors' },
   { category: 'paramedical', queryName: 'profession', resourceKey: 'paramedical-occupations' },
-  { category: 'mental', queryName: 'profession', resourceKey: 'mental-occupations' },
+  { category: 'mental', queryName: 'profession', resourceKey: 'mental' },
   { category: 'medicalService', queryName: 'profession', resourceKey: 'medicalService-occupations' },
   { category: 'imagingInstitutes', queryName: 'specialty', resourceKey: 'imagingInstitutes' },
   { category: 'labTests', queryName: 'specialty', resourceKey: 'labTests-occupations' },
@@ -55,13 +55,18 @@ export class ProviderDirectoryService {
     return (await res.json()) as T;
   }
 
+  /** קטגוריות-משנה שאינן מקצוע (לא לערבב במיפוי המקצועות). */
+  private static readonly NON_PROFESSION = new Set(['Language', 'Gender', 'Prefix', 'AcademicDegree']);
+
   private flattenResources(payload: any): Record<number, string> {
     const map: Record<number, string> = {};
     const collect = (arr: any[]) =>
       arr?.forEach((r) => (map[r.resourceId] = String(r.content).trim()));
     if (Array.isArray(payload?.resources)) collect(payload.resources);
     else if (payload && typeof payload === 'object')
-      for (const v of Object.values<any>(payload)) if (Array.isArray(v?.resources)) collect(v.resources);
+      for (const v of Object.values<any>(payload))
+        if (Array.isArray(v?.resources) && !ProviderDirectoryService.NON_PROFESSION.has(v?.categoryName))
+          collect(v.resources);
     return map;
   }
 
