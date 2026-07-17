@@ -77,6 +77,19 @@ export class CatalogRepository {
     return this.prisma.catalogItem.findFirst({ where: { entityId, isDeleted: false } });
   }
 
+  /** מק"טים (catalogNumber ייחודיים) לפי קוד שירות/מב"ר — הכיוון ההפוך ל-service-code. */
+  async maktsForMabar(code: string): Promise<string[]> {
+    const c = (code || '').trim();
+    if (!c) return [];
+    const rows = await this.prisma.catalogItem.findMany({
+      where: { catalogPricelistNum: c, isDeleted: false },
+      select: { catalogNumber: true },
+      distinct: ['catalogNumber'],
+      orderBy: { catalogNumber: 'asc' },
+    });
+    return rows.map((r) => r.catalogNumber);
+  }
+
   async findByCatalogNumber(catalogNumber: string): Promise<CatalogItem[]> {
     return this.prisma.catalogItem.findMany({
       where: { catalogNumber: normalizeCatalogNumber(catalogNumber), isDeleted: false },

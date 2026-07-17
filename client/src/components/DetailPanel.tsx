@@ -29,6 +29,7 @@ export function DetailPanel({
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showApi, setShowApi] = useState(false);
 
   useEffect(() => {
     if (!entityId) {
@@ -76,6 +77,31 @@ export function DetailPanel({
 
   const suppliers = item.authorized_suppliers || [];
 
+  // פקודות cURL להמרה דו-כיוונית מק"ט ↔ קוד מב"ר — לצפייה ב-URL של ה-API ולהעתקה.
+  function apiCurls(): string {
+    const origin = window.location.origin;
+    const makat = item!.catalogNumber;
+    const lines = [
+      '# מק"ט → קוד מב"ר',
+      `curl '${origin}/api/makt/${encodeURIComponent(makat)}/mabar'`,
+    ];
+    if (item!.catalogPricelistNum) {
+      lines.push(
+        '',
+        '# קוד מב"ר → מק"טים (הפוך)',
+        `curl '${origin}/api/mabar/${encodeURIComponent(item!.catalogPricelistNum)}/makt'`,
+      );
+    }
+    return lines.join('\n');
+  }
+
+  function copyApi() {
+    navigator.clipboard
+      ?.writeText(apiCurls())
+      .then(() => showToast('פקודת cURL הועתקה', 'ok'))
+      .catch(() => showToast('לא ניתן להעתיק', 'error'));
+  }
+
   return (
     <>
       <section className="card">
@@ -110,6 +136,9 @@ export function DetailPanel({
               היסטוריית שינויים ({item.history_count})
             </button>
           )}
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowApi(true)}>
+            <Icon name="copy" /> cURL / API
+          </button>
         </div>
         {showHistory && (
           <div className="table-wrap" style={{ marginTop: 12 }}>
@@ -140,6 +169,36 @@ export function DetailPanel({
       </section>
 
       <SuppliersPanel key={item.entityId} suppliers={suppliers} />
+
+      {showApi && (
+        <div className="popup-overlay" onClick={() => setShowApi(false)}>
+          <div
+            className="popup-modal curl-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="cURL — קריאות API"
+          >
+            <div className="popup-head">
+              <h3>cURL — המרת מק"ט ↔ קוד מב"ר</h3>
+              <button className="chat-close" onClick={() => setShowApi(false)} aria-label="סגור">
+                <Icon name="close" />
+              </button>
+            </div>
+            <p className="hint" style={{ marginTop: 0 }}>
+              כתובות ה-API להמרה דו-כיוונית בין מק"ט לקוד מב"ר — לצפייה, העתקה ואינטגרציה.
+            </p>
+            <pre className="curl-block">{apiCurls()}</pre>
+            <div className="chat-report-actions">
+              <button className="btn btn-primary btn-sm" onClick={copyApi}>
+                <Icon name="copy" /> העתק
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowApi(false)}>
+                סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

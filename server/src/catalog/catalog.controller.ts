@@ -87,6 +87,16 @@ export class CatalogController {
     return { catalogNumber, mabarCode: serviceCode };
   }
 
+  /**
+   * הכיוון ההפוך: קוד הפניה מב"ר -> מק"טים (catalogNumbers).
+   * קוד מב"ר יחיד עשוי לכסות כמה מק"טים, ולכן מוחזרת רשימה.
+   */
+  @Get('api/mabar/:code/makt')
+  async maktByMabar(@Param('code') code: string) {
+    if (!code || !code.trim()) throw new BadRequestException('נדרש קוד מב"ר');
+    return this.catalog.getMaktsForMabar(code);
+  }
+
   // --- Legacy endpoints (תאימות לאחור) ---
   @Get('items')
   async legacyItems(

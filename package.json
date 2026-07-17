@@ -1,6 +1,6 @@
 {
   "name": "shikum-api",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "SHIKUM_API — מערכת שליפת מק\"טים, וריאנטים וספקים מורשים (Node.js + React). שכתוב מלא של kms-api.",
   "workspaces": [

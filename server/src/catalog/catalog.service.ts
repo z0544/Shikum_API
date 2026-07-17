@@ -134,6 +134,14 @@ export class CatalogService {
     return this.repo.searchByTrigram(query, limit);
   }
 
+  /** הכיוון ההפוך: קוד הפניה מב"ר -> רשימת מק"טים (קוד אחד עשוי לכסות כמה מק"טים). */
+  async getMaktsForMabar(
+    code: string,
+  ): Promise<{ mabarCode: string; count: number; catalogNumbers: string[] }> {
+    const catalogNumbers = await this.repo.maktsForMabar(code);
+    return { mabarCode: (code || '').trim(), count: catalogNumbers.length, catalogNumbers };
+  }
+
   /**
    * מחזיר את קוד השירות (catalogPricelistNum) של המק"ט — הערך הראשון הקיים
    * מבין הוריאנטים. אם למק"ט אין קוד שירות כלל (או שאינו קיים) — serviceCode יהיה null.

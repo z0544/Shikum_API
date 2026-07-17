@@ -68,6 +68,13 @@ export const api = {
     return handle(await fetch(`/api/makt/${encodeURIComponent(makt)}/mabar`));
   },
 
+  /** הכיוון ההפוך: קוד מב"ר -> מק"טים. */
+  async getMaktByMabar(
+    code: string,
+  ): Promise<{ mabarCode: string; count: number; catalogNumbers: string[] }> {
+    return handle(await fetch(`/api/mabar/${encodeURIComponent(code)}/makt`));
+  },
+
   async aiSearch(query: string): Promise<AiSearchResponse> {
     return handle<AiSearchResponse>(
       await fetch('/api/ai/search', {
