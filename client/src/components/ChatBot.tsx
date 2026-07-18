@@ -4,6 +4,7 @@ import type { AiResult, ChatContext, Supplier } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { Icon } from './icons';
 import { normalizePhone, telHref } from '../format';
+import { useDialogDismiss } from '../hooks/useDialogDismiss';
 
 interface Msg {
   id: number;
@@ -16,8 +17,8 @@ interface Msg {
 
 type Intent = 'search' | 'suppliers' | 'contact';
 
-/** יעד הדיווח על קודים שלא נמצאו במאגר (כרגע דרך מייל). */
-const REPORT_EMAIL = 'yehudakri@gmail.com';
+/** יעד הדיווח על קודים שלא נמצאו במאגר (כרגע דרך מייל). ניתן להגדרה ב-build דרך VITE_REPORT_EMAIL. */
+const REPORT_EMAIL = import.meta.env.VITE_REPORT_EMAIL || 'yehudakri@gmail.com';
 
 const GREETING =
   'שלום! 👋 אני העוזר החכם של מערכת השיקום. ספרו לי מה הבעיה או הצורך ואשאל שאלות כדי להבין במה לעזור.\nאם יש לכם מסמך הפניה — אפשר לצרף אותו (📎) ואזהה ממנו איזה שירות דרוש.';
@@ -553,44 +554,72 @@ export function ChatBot() {
       </button>
 
       {reportCodes && (
-        <div className="chat-report-overlay" onClick={() => setReportCodes(null)}>
-          <div
-            className="chat-report-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label="דיווח על קודים שלא נמצאו"
-          >
-            <div className="chat-report-head">
-              <h3>דיווח על קודים שלא נמצאו</h3>
-              <button className="chat-close" onClick={() => setReportCodes(null)} aria-label="סגור">
-                <Icon name="close" />
-              </button>
-            </div>
-            <p className="chat-report-sub">
-              הקודים הבאים חולצו ממסמך ההפניה אך אינם קיימים במאגר. הדיווח יישלח לטיפול מנהל המערכת.
-            </p>
-            <ul className="chat-report-list">
-              {reportCodes.map((c) => (
-                <li key={c}>
-                  <span className="chip amber">{c}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="chat-report-actions">
-              <button className="btn btn-primary btn-sm" onClick={() => sendReportEmail(reportCodes)}>
-                <Icon name="mail" /> שלח מייל
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => copyReport(reportCodes)}>
-                העתק פרטים
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setReportCodes(null)}>
-                ביטול
-              </button>
-            </div>
-            <p className="chat-report-foot">יישלח אל: {REPORT_EMAIL}</p>
-          </div>
-        </div>
+        <ReportDialog
+          codes={reportCodes}
+          email={REPORT_EMAIL}
+          onSendEmail={sendReportEmail}
+          onCopy={copyReport}
+          onClose={() => setReportCodes(null)}
+        />
       )}
     </>
+  );
+}
+
+function ReportDialog({
+  codes,
+  email,
+  onSendEmail,
+  onCopy,
+  onClose,
+}: {
+  codes: string[];
+  email: string;
+  onSendEmail: (codes: string[]) => void;
+  onCopy: (codes: string[]) => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useDialogDismiss<HTMLDivElement>(onClose);
+  return (
+    <div className="chat-report-overlay" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="chat-report-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="דיווח על קודים שלא נמצאו"
+      >
+        <div className="chat-report-head">
+          <h3>דיווח על קודים שלא נמצאו</h3>
+          <button className="chat-close" onClick={onClose} aria-label="סגור">
+            <Icon name="close" />
+          </button>
+        </div>
+        <p className="chat-report-sub">
+          הקודים הבאים חולצו ממסמך ההפניה אך אינם קיימים במאגר. הדיווח יישלח לטיפול מנהל המערכת.
+        </p>
+        <ul className="chat-report-list">
+          {codes.map((c) => (
+            <li key={c}>
+              <span className="chip amber">{c}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="chat-report-actions">
+          <button className="btn btn-primary btn-sm" onClick={() => onSendEmail(codes)}>
+            <Icon name="mail" /> שלח מייל
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => onCopy(codes)}>
+            העתק פרטים
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>
+            ביטול
+          </button>
+        </div>
+        <p className="chat-report-foot">יישלח אל: {email}</p>
+      </div>
+    </div>
   );
 }

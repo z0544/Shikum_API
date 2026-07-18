@@ -6,6 +6,7 @@ import { Breadcrumbs } from './Header';
 import { DetailPanel } from './DetailPanel';
 import { Highlight } from './Highlight';
 import { Icon } from './icons';
+import { useDialogDismiss } from '../hooks/useDialogDismiss';
 
 const MATCH_OPTS = [
   ['contains', 'מכיל'],
@@ -325,11 +326,12 @@ export function SearchView() {
         </section>
 
         <div className="workspace">
-          <section className="card">
+          <section className="card" aria-busy={loading}>
             <div className="panel-head">
               <h2>תוצאות חיפוש</h2>
               <span className="count-pill">{groups ? `${meta.count} מק"טים` : '0'}</span>
             </div>
+            {loading && groups && <div className="reloading-bar" aria-hidden="true" />}
             {meta.explanation && groups && groups.length > 0 && (
               <p className="hint" style={{ marginTop: 0 }}>
                 {meta.explanation}
@@ -339,6 +341,7 @@ export function SearchView() {
             {loading && !groups && <ResultsSkeleton />}
             {!loading && !groups && <p className="empty-state">בצע חיפוש כדי להציג תוצאות</p>}
             {groups && groups.length === 0 && <p className="empty-state">לא נמצאו תוצאות</p>}
+            <div className={loading && groups ? 'results-reloading' : undefined}>
             {groups?.map((g) => {
               const isOpen = expanded.has(g.catalogNumber);
               const isSelected = g.variants.some((v) => v.entityId === selected);
@@ -397,6 +400,7 @@ export function SearchView() {
                 </div>
               );
             })}
+            </div>
           </section>
 
           <div>
@@ -406,35 +410,53 @@ export function SearchView() {
       </main>
 
       {showCurl && (
-        <div className="popup-overlay" onClick={() => setShowCurl(false)}>
-          <div
-            className="popup-modal curl-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label="פקודת cURL"
-          >
-            <div className="popup-head">
-              <h3>cURL — קריאת ה-API</h3>
-              <button className="chat-close" onClick={() => setShowCurl(false)} aria-label="סגור">
-                <Icon name="close" />
-              </button>
-            </div>
-            <p className="hint" style={{ marginTop: 0 }}>
-              פקודת cURL לקריאת ה-API של החיפוש הנוכחי — לייחצון ואינטגרציה.
-            </p>
-            <pre className="curl-block">{buildCurl()}</pre>
-            <div className="chat-report-actions">
-              <button className="btn btn-primary btn-sm" onClick={copyCurl}>
-                <Icon name="copy" /> העתק פקודה
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowCurl(false)}>
-                סגור
-              </button>
-            </div>
-          </div>
-        </div>
+        <CurlDialog curl={buildCurl()} onCopy={copyCurl} onClose={() => setShowCurl(false)} />
       )}
     </>
+  );
+}
+
+function CurlDialog({
+  curl,
+  onCopy,
+  onClose,
+}: {
+  curl: string;
+  onCopy: () => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useDialogDismiss<HTMLDivElement>(onClose);
+  return (
+    <div className="popup-overlay" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="popup-modal curl-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="פקודת cURL"
+      >
+        <div className="popup-head">
+          <h3>cURL — קריאת ה-API</h3>
+          <button className="chat-close" onClick={onClose} aria-label="סגור">
+            <Icon name="close" />
+          </button>
+        </div>
+        <p className="hint" style={{ marginTop: 0 }}>
+          פקודת cURL לקריאת ה-API של החיפוש הנוכחי — לייחצון ואינטגרציה.
+        </p>
+        <pre className="curl-block">{curl}</pre>
+        <div className="chat-report-actions">
+          <button className="btn btn-primary btn-sm" onClick={onCopy}>
+            <Icon name="copy" /> העתק פקודה
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>
+            סגור
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

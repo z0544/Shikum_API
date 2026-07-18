@@ -1,6 +1,7 @@
 import { useApp } from '../state/AppContext';
 import { DetailPanel } from './DetailPanel';
 import { Icon } from './icons';
+import { useDialogDismiss } from '../hooks/useDialogDismiss';
 
 /**
  * חלון קופץ (modal) המציג וריאנט בודד מעל דף החיפוש — נפתח מקישור שיתוף
@@ -8,12 +9,16 @@ import { Icon } from './icons';
  */
 export function VariantDialog({ entityId }: { entityId: string }) {
   const { closePopup, openVariant } = useApp();
+  const dialogRef = useDialogDismiss<HTMLDivElement>(closePopup);
   return (
     <div className="popup-overlay" onClick={closePopup}>
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="popup-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-label={`פרטי וריאנט ${entityId}`}
       >
         <div className="popup-head">

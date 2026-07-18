@@ -5,9 +5,9 @@ import { useApp } from '../state/AppContext';
 import { Breadcrumbs } from './Header';
 
 const KINDS: [string, string][] = [
-  ['items', 'מק"טים (53331)'],
-  ['suppliers', 'ספקים (9028)'],
-  ['agreements', 'הסכמים (52593)'],
+  ['items', 'מק"טים'],
+  ['suppliers', 'ספקים'],
+  ['agreements', 'הסכמים'],
 ];
 
 export function AdminView() {

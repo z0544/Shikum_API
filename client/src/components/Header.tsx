@@ -10,17 +10,33 @@ export function Header() {
           <span className="brand-badge">◈</span>
           <span>מערכת שיקום</span>
         </div>
-        <nav className="nav">
-          <button className={view === 'search' ? 'active' : ''} onClick={() => setView('search')}>
+        <nav className="nav" aria-label="ניווט ראשי">
+          <button
+            className={view === 'search' ? 'active' : ''}
+            aria-current={view === 'search' ? 'page' : undefined}
+            onClick={() => setView('search')}
+          >
             חיפוש מק"טים
           </button>
-          <button className={view === 'variant' ? 'active' : ''} onClick={() => setView('variant')}>
+          <button
+            className={view === 'variant' ? 'active' : ''}
+            aria-current={view === 'variant' ? 'page' : undefined}
+            onClick={() => setView('variant')}
+          >
             תצוגת וריאנט
           </button>
-          <button className={view === 'admin' ? 'active' : ''} onClick={() => setView('admin')}>
+          <button
+            className={view === 'admin' ? 'active' : ''}
+            aria-current={view === 'admin' ? 'page' : undefined}
+            onClick={() => setView('admin')}
+          >
             ניהול וטעינת נתונים
           </button>
-          <button className={view === 'api' ? 'active' : ''} onClick={() => setView('api')}>
+          <button
+            className={view === 'api' ? 'active' : ''}
+            aria-current={view === 'api' ? 'page' : undefined}
+            onClick={() => setView('api')}
+          >
             API
           </button>
         </nav>

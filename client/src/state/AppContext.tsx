@@ -44,6 +44,8 @@ interface AppState {
   setAdminToken: (t: string) => void;
   toast: ToastState | null;
   showToast: (message: string, kind?: ToastState['kind']) => void;
+  /** סגירה ידנית של ההודעה הצפה. */
+  dismissToast: () => void;
   theme: Theme;
   toggleTheme: () => void;
   /** מונה שמתקדם בכל "דף הבית" — רכיבים מאזינים לו כדי לאפס את מצבם. */
@@ -175,6 +177,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     timer.current = window.setTimeout(() => setToast(null), 3500);
   }, []);
 
+  const dismissToast = useCallback(() => {
+    window.clearTimeout(timer.current);
+    setToast(null);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -190,6 +197,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAdminToken,
         toast,
         showToast,
+        dismissToast,
         theme,
         toggleTheme,
         resetSignal,
