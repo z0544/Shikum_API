@@ -97,22 +97,48 @@ function StreamedText({
   return <>{words.slice(0, n).join('')}</>;
 }
 
+const CHAT_STORAGE_KEY = 'shikum_chat';
+
+interface PersistedChat {
+  msgs: Msg[];
+  ctx: ChatContext;
+  quick: string[];
+}
+
+/** שחזור השיחה מ-sessionStorage (שורדת רענון עמוד). */
+function loadChat(): PersistedChat | null {
+  try {
+    const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as PersistedChat;
+    return Array.isArray(p.msgs) ? p : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ChatBot() {
   const { openVariant, openSearch, showToast, resetSignal } = useApp();
+  const persisted = useMemo(loadChat, []);
   const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [ctx, setCtx] = useState<ChatContext>({});
-  const [quick, setQuick] = useState<string[]>(START_QUICK);
+  const [msgs, setMsgs] = useState<Msg[]>(persisted?.msgs ?? []);
+  const [ctx, setCtx] = useState<ChatContext>(persisted?.ctx ?? {});
+  const [quick, setQuick] = useState<string[]>(persisted?.quick ?? START_QUICK);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [suggests, setSuggests] = useState<string[]>([]);
   const [acIndex, setAcIndex] = useState(-1);
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  // הודעות משוחזרות נחשבות כבר "נחשפו" — לא מזרימים אותן מחדש בטעינה.
+  const [revealed, setRevealed] = useState<Set<number>>(
+    () => new Set((persisted?.msgs ?? []).filter((m) => m.role === 'bot').map((m) => m.id)),
+  );
   const [pendingIntent, setPendingIntent] = useState<Intent | null>(null);
   const [catalogCount, setCatalogCount] = useState<number | null>(null);
   const [reportCodes, setReportCodes] = useState<string[] | null>(null);
-  const idRef = useRef(0);
+  const idRef = useRef(persisted?.msgs?.reduce((max, m) => Math.max(max, m.id), 0) ?? 0);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fabRef = useRef<HTMLButtonElement>(null);
   const suggestTimer = useRef<number>();
   const suggestSeq = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -129,6 +155,10 @@ export function ChatBot() {
       return n;
     });
 
+  const isNearBottom = () => {
+    const el = bodyRef.current;
+    return el ? el.scrollHeight - el.scrollTop - el.clientHeight < 80 : true;
+  };
   const scrollToBottom = (smooth = false) =>
     bodyRef.current?.scrollTo({
       top: bodyRef.current.scrollHeight,
@@ -137,12 +167,10 @@ export function ChatBot() {
 
   useEffect(() => {
     if (!open) return;
+    inputRef.current?.focus();
     if (msgs.length === 0) pushBot({ text: GREETING });
     if (catalogCount == null) {
-      fetch('/health')
-        .then((r) => r.json())
-        .then((d) => setCatalogCount(typeof d.item_count === 'number' ? d.item_count : null))
-        .catch(() => {});
+      api.health().then((d) => setCatalogCount(typeof d.item_count === 'number' ? d.item_count : null));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -150,6 +178,19 @@ export function ChatBot() {
   useEffect(() => {
     scrollToBottom(true);
   }, [msgs, loading]);
+
+  // התמדת השיחה — שורדת רענון עמוד.
+  useEffect(() => {
+    if (msgs.length === 0) {
+      sessionStorage.removeItem(CHAT_STORAGE_KEY);
+      return;
+    }
+    try {
+      sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ msgs, ctx, quick }));
+    } catch {
+      /* מכסת אחסון — מתעלמים */
+    }
+  }, [msgs, ctx, quick]);
 
   // "דף הבית" — איפוס השיחה וסגירת החלון.
   useEffect(() => {
@@ -219,6 +260,12 @@ export function ChatBot() {
   /** פעולת המשך מכרטיס מק"ט — שולח הודעה עם הקשר ממוקד למק"ט זה. */
   function cardAction(makat: string, message: string) {
     send(message, { ...ctx, makat });
+  }
+
+  /** סוגר את חלון הצ'אט ומחזיר את הפוקוס לכפתור הצף. */
+  function closePanel() {
+    setOpen(false);
+    fabRef.current?.focus();
   }
 
   /** פותח את התוצאה בעמוד החיפוש הראשי (עם וריאנטים, ספקים ופאנל פרטים) וסוגר את הצ'אט. */
@@ -333,7 +380,14 @@ export function ChatBot() {
   return (
     <>
       {open && (
-        <div className="chat-panel" role="dialog" aria-label="עוזר חכם">
+        <div
+          className="chat-panel"
+          role="dialog"
+          aria-label="עוזר חכם"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') closePanel();
+          }}
+        >
           <div className="chat-head">
             <span className="chat-avatar" aria-hidden="true">
               <Icon name="logo" />
@@ -348,7 +402,7 @@ export function ChatBot() {
             <button className="chat-new" onClick={newConversation} title="התחל שיחה חדשה">
               <Icon name="refresh" /> שיחה חדשה
             </button>
-            <button className="chat-close" onClick={() => setOpen(false)} aria-label="סגור">
+            <button className="chat-close" onClick={closePanel} aria-label="סגור">
               <Icon name="close" />
             </button>
           </div>
@@ -360,11 +414,17 @@ export function ChatBot() {
               return (
                 <div key={m.id} className={`chat-msg ${m.role}`}>
                   {m.text && (
-                    <div className="chat-text">
+                    <div
+                      className="chat-text"
+                      onClick={() => streaming && markRevealed(m.id)}
+                      title={streaming ? 'הקש להצגת התשובה המלאה' : undefined}
+                    >
                       {streaming ? (
                         <StreamedText
                           text={m.text}
-                          onProgress={() => scrollToBottom(false)}
+                          onProgress={() => {
+                            if (isNearBottom()) scrollToBottom(false);
+                          }}
                           onDone={() => markRevealed(m.id)}
                         />
                       ) : (
@@ -575,6 +635,7 @@ export function ChatBot() {
               <Icon name="attach" />
             </button>
             <input
+              ref={inputRef}
               value={input}
               onChange={(e) => onInputChange(e.target.value)}
               onKeyDown={onInputKeyDown}
@@ -594,9 +655,11 @@ export function ChatBot() {
       )}
 
       <button
+        ref={fabRef}
         className={`chat-fab${open ? ' open' : ''}`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? closePanel() : setOpen(true))}
         aria-label={open ? 'סגור עוזר חכם' : 'פתח עוזר חכם'}
+        aria-expanded={open}
         title="עוזר חכם"
       >
         <Icon name={open ? 'close' : 'chat'} />

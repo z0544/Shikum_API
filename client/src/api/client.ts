@@ -102,6 +102,16 @@ export const api = {
     return handle<ChatResponse>(await fetch('/api/ai/chat/document', { method: 'POST', body: fd }));
   },
 
+  async health(): Promise<{ item_count?: number; smart_search?: string; database_ready?: boolean }> {
+    try {
+      const res = await fetch('/health');
+      if (!res.ok) return {};
+      return (await res.json()) as { item_count?: number };
+    } catch {
+      return {};
+    }
+  },
+
   async suggest(q: string): Promise<string[]> {
     try {
       const res = await fetch(`/api/ai/suggest?q=${encodeURIComponent(q)}`);

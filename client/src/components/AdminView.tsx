@@ -142,8 +142,9 @@ export function AdminView() {
           </div>
           <div className="search-row">
             <div className="field grow">
-              <label>X-Admin-Token</label>
+              <label htmlFor="admin-token">X-Admin-Token</label>
               <input
+                id="admin-token"
                 type="password"
                 value={adminToken}
                 onChange={(e) => setAdminToken(e.target.value)}
@@ -373,7 +374,7 @@ function ConfigEditor({
   onSave,
 }: {
   rows: ConfigMapRow[];
-  onSave: (row: ConfigMapRow, intValue: number) => void;
+  onSave: (row: ConfigMapRow, intValue: number) => void | Promise<void>;
 }) {
   return (
     <section className="card">
@@ -440,12 +441,18 @@ function SynonymEditor({
       </p>
       <div className="search-row">
         <div className="field grow">
-          <label>מונח (שפת משתמש)</label>
-          <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="למשל: עגלה" />
+          <label htmlFor="syn-term">מונח (שפת משתמש)</label>
+          <input
+            id="syn-term"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="למשל: עגלה"
+          />
         </div>
         <div className="field grow">
-          <label>מונח רשמי בקטלוג</label>
+          <label htmlFor="syn-target">מונח רשמי בקטלוג</label>
           <input
+            id="syn-target"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -541,16 +548,31 @@ function ConfigRow({
   onSave,
 }: {
   row: ConfigMapRow;
-  onSave: (row: ConfigMapRow, intValue: number) => void;
+  onSave: (row: ConfigMapRow, intValue: number) => void | Promise<void>;
 }) {
   const [val, setVal] = useState(String(row.intValue));
+  const [saving, setSaving] = useState(false);
   const dirty = val !== String(row.intValue);
+  const inputId = `cfg-${row.id}`;
+
+  async function doSave() {
+    setSaving(true);
+    try {
+      await onSave(row, parseInt(val, 10) || 0);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <tr>
-      <td>{row.field}</td>
+      <td>
+        <label htmlFor={inputId}>{row.field}</label>
+      </td>
       <td>{row.textValue}</td>
       <td>
         <input
+          id={inputId}
           style={{ width: 80, padding: '5px 8px' }}
           type="number"
           value={val}
@@ -558,12 +580,8 @@ function ConfigRow({
         />
       </td>
       <td>
-        <button
-          className="btn btn-ghost btn-sm"
-          disabled={!dirty}
-          onClick={() => onSave(row, parseInt(val, 10) || 0)}
-        >
-          שמור
+        <button className="btn btn-ghost btn-sm" disabled={!dirty || saving} onClick={doSave}>
+          {saving ? 'שומר…' : 'שמור'}
         </button>
       </td>
     </tr>
