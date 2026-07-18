@@ -923,12 +923,19 @@ export class SearchService {
     const supplier_names = allSuppliers.map((s) => (s as any).name).filter(Boolean);
 
     const subject_makat = (base.context?.makat as string | undefined) ?? null;
+    // מספר הספקים המרבי מבין התוצאות — בכוונת חיפוש הספקים נמצאים בתוך כל תוצאה
+    // (results[].supplier_count) ולא ברשימת suppliers העליונה, ובלי זה Gemini טוען בטעות "אין ספקים".
+    const maxResultSupplierCount = results.reduce(
+      (m, r) => Math.max(m, Number(r.supplier_count) || 0),
+      0,
+    );
     const data = {
       intent: base.intent,
       subject_makat,
       results,
       suppliers,
       supplier_total: allSuppliers.length,
+      max_result_supplier_count: maxResultSupplierCount,
       supplier_names,
     };
     const hasData = results.length > 0 || allSuppliers.length > 0;
@@ -939,6 +946,7 @@ export class SearchService {
       'קרא את כל היסטוריית השיחה שסופקה והתייחס להקשר. כינויי רמז ("אותו", "זה", "שלו", "שם") מתייחסים למק"ט/מוצר שבמוקד השיחה (subject_makat או האזכור האחרון בהיסטוריה) — ענה לגביו, אל תבקש הבהרה חוזרת על מה שכבר ידוע.',
       'הסתמך אך ורק על הנתונים שסופקו לך (JSON). אל תמציא מק"טים, ספקים, טלפונים או עובדות שאינן בנתונים.',
       'supplier_names היא רשימת כל הספקים המורשים למק"ט (המלאה); suppliers מפרט את 40 הראשונים עם עיר וקרבה. אם supplier_total>0 קיימים ספקים — לעולם אל תאמר שאין ספקים או שאין בית חולים/מרכז שמספק את השירות.',
+      'בכוונת חיפוש, מספר הספקים של כל מק"ט נמצא בשדה supplier_count שבתוך results (ולא ברשימת suppliers). אם supplier_count>0 או max_result_supplier_count>0 — קיימים ספקים מורשים; אל תאמר שאין, אלא ציין שיש ספקים והצע לשאול "מי מספק?" או "מה הטלפון?" לקבלת הרשימה ופרטי הקשר.',
       'אם המשתמש ביקש ספקים במחוז/עיר מסוימים — הדגש את הספקים באותו אזור (לפי שדה city/proximity) אך אל תטען שאין אחרים; הספקים כבר מדורגים לפי קרבה.',
       'אם נשאלת אם ספק/בית חולים מסוים מספק את השירות — בדוק את שמו מול supplier_names (התאמה חלקית מספיקה); אם הוא מופיע, אשר זאת במפורש. אל תסנן ספקים לפי סוג (בית חולים/מכון/יחיד).',
       'אל תמציא מחירים או זמינות. אם באמת אין נתונים (supplier_total=0 ואין תוצאות), אמור זאת בכנות והצע לנסח מחדש או לבחור קטגוריה.',
