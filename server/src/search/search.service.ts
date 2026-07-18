@@ -564,6 +564,8 @@ export class SearchService {
     'מי', 'מספק', 'מספקים', 'נותן', 'נותנים', 'שירות', 'ספק', 'ספקים', 'מורשה', 'מורשים',
     'טלפון', 'נייד', 'מייל', 'דוא"ל', 'כתובת', 'פרטי', 'קשר', 'של', 'מה', 'מהו', 'היכן',
     'איפה', 'אפשר', 'להשיג', 'את',
+    // כינויי רמז (מפנים לעוגן ההקשר, לא למוצר חדש) ומילות מחוז/אזור
+    'אותו', 'אותה', 'אותם', 'אותן', 'זה', 'זאת', 'הזה', 'מחוז', 'במחוז', 'אזור', 'באזור',
   ];
 
   private stripIntentWords(text: string): string {
@@ -634,8 +636,18 @@ export class SearchService {
     // כדי שלחיצה על "מי מספק?" תחזיר ספקים ולא תשאל שוב "לאיזה שירות".
     const followupIntent = this.classifyIntent(message);
     const hasAnchor = !!(ctx.makat || ctx.lastQuery || ctx.product);
+
+    // קלט שהוא מק"ט/קוד שירות מפורש (למשל "35454", "מקט 35454", "C2169") — מזוהה ישירות
+    // מול המאגר ומדלג על שלב ההבנה של Gemini, שאחרת מבקש הבהרה על מספר תקין ("לא זיהיתי את הצורך").
+    const codeCandidate = message.trim().replace(/^(מק"?ט|מקט|קוד|מספר)\s+/i, '').trim();
+    const isBareCode =
+      /^[0-9A-Za-z][0-9A-Za-z-]{1,}$/.test(codeCandidate) &&
+      !/[א-ת]/.test(codeCandidate) &&
+      (await this.searchByCode(codeCandidate)).length > 0;
+    if (isBareCode) query = codeCandidate;
+
     const skipUnderstand =
-      (followupIntent === 'suppliers' || followupIntent === 'contact') && hasAnchor;
+      ((followupIntent === 'suppliers' || followupIntent === 'contact') && hasAnchor) || isBareCode;
 
     // שלב הבנה (רק כש-AI פעיל, לא באמצע המתנה למיקום, ולא בכוונת המשך-ספקים מעוגנת):
     // אם ההודעה מעורפלת / תיאור בעיה — נשאל שאלת הבהרה לפני שמחפשים מק"טים.
@@ -963,9 +975,14 @@ export class SearchService {
     if (intent === 'contact' || intent === 'suppliers') {
       ctx.awaitingLocation = false;
       ctx.product = null;
+      // מיקום שהוזכר בהודעה עצמה (למשל "מי מספק ... במחוז ירושלים") — לדירוג הספקים לפי קרבה.
+      const msgCity = this.geo.findCityInText(text);
+      if (msgCity) ctx.location = msgCity;
       let makat = await this.resolveMakatFromText(text);
       if (!makat) {
-        const cleaned = this.stripIntentWords(text);
+        // מנקים מילות כוונה + אזכור המיקום; מה שנשאר הוא מוצר חדש (אם צוין). כשנותרו רק
+        // כינויי רמז/מיקום ("אותו במחוז ירושלים") — לא מחפשים מחדש אלא נצמדים לעוגן ההקשר.
+        const cleaned = this.removeCityFromText(this.stripIntentWords(text), msgCity).trim();
         if (cleaned.length >= 2) {
           const res = await this.runAiSearch(cleaned);
           if (res.count) {

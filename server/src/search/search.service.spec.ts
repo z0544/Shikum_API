@@ -142,4 +142,38 @@ describe('SearchService — מכונת המצבים של chat()', () => {
     expect(r.reply).toContain('על איזה מוצר');
     expect(r.quickReplies && r.quickReplies.length).toBeGreaterThan(0);
   });
+
+  it('BUG — מק"ט בודד מדלג על שלב ההבנה של Gemini ומחפש ישירות', async () => {
+    const gemini = {
+      isEnabled: () => true,
+      generateJson: jest.fn(),
+      generate: jest.fn().mockResolvedValue(null),
+    };
+    const svc = new SearchService({} as any, geo, catalog as any, gemini as any);
+    const sx = svc as any;
+    jest
+      .spyOn(sx, 'searchByCode')
+      .mockResolvedValue([{ catalogNumber: '35454', entityId: '35454-0-0-0-0' }]);
+    const runSpy = jest
+      .spyOn(sx, 'runAiSearch')
+      .mockResolvedValue(cannedSearch({ results: [{ catalogNumber: '35454' }], user_location: 'ירושלים' }));
+    const r = await svc.chat('35454', {});
+    expect(gemini.generateJson).not.toHaveBeenCalled(); // דילג על שלב ההבנה
+    expect(runSpy).toHaveBeenCalledWith('35454');
+    expect(r.context.makat).toBe('35454');
+  });
+
+  it('BUG — "מי מספק אותו במחוז ירושלים" עם עוגן → ספקי המק"ט מדורגים לפי ירושלים', async () => {
+    jest.spyOn(s, 'resolveMakatFromText').mockResolvedValue(null);
+    const runSpy = jest.spyOn(s, 'runAiSearch');
+    catalog.getSuppliersForMakt.mockResolvedValue([
+      { modSupplierId: '1', name: 'מרכז רפואי שערי צדק', city: 'ירושלים' },
+    ]);
+    const r = await service.chat('מי מספק אותו במחוז ירושלים', { makat: '35454' });
+    expect(r.intent).toBe('suppliers');
+    expect(catalog.getSuppliersForMakt).toHaveBeenCalledWith('35454');
+    expect(runSpy).not.toHaveBeenCalled(); // לא חיפש מוצר חדש — נצמד לעוגן ההקשר
+    expect(r.context.location).toBe('ירושלים');
+    expect(r.suppliers).toHaveLength(1);
+  });
 });
