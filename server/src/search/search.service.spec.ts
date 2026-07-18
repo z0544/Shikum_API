@@ -165,6 +165,7 @@ describe('SearchService — מכונת המצבים של chat()', () => {
 
   it('BUG — "מי מספק אותו במחוז ירושלים" עם עוגן → ספקי המק"ט מדורגים לפי ירושלים', async () => {
     jest.spyOn(s, 'resolveMakatFromText').mockResolvedValue(null);
+    jest.spyOn(s, 'searchByCode').mockResolvedValue([]);
     const runSpy = jest.spyOn(s, 'runAiSearch');
     catalog.getSuppliersForMakt.mockResolvedValue([
       { modSupplierId: '1', name: 'מרכז רפואי שערי צדק', city: 'ירושלים' },
@@ -175,5 +176,58 @@ describe('SearchService — מכונת המצבים של chat()', () => {
     expect(runSpy).not.toHaveBeenCalled(); // לא חיפש מוצר חדש — נצמד לעוגן ההקשר
     expect(r.context.location).toBe('ירושלים');
     expect(r.suppliers).toHaveLength(1);
+  });
+
+  // בונה שירות עם Gemini פעיל ו-searchByCode שמזהה 35454 בכל מקום בטקסט.
+  function serviceWithCode() {
+    const gemini = {
+      isEnabled: () => true,
+      generateJson: jest.fn(),
+      generate: jest.fn().mockResolvedValue(null),
+    };
+    const svc = new SearchService({} as any, geo, catalog as any, gemini as any);
+    const sx = svc as any;
+    jest.spyOn(sx, 'searchByCode').mockImplementation(async (q: string) =>
+      String(q).includes('35454') ? [{ catalogNumber: '35454', entityId: '35454-0-0-0-0' }] : [],
+    );
+    return { svc, sx, gemini };
+  }
+
+  it('BUG — מק"ט מוטמע במשפט עברי "יש לי מקט 35454" מזוהה ומחפש ישירות', async () => {
+    const { svc, sx, gemini } = serviceWithCode();
+    const runSpy = jest
+      .spyOn(sx, 'runAiSearch')
+      .mockResolvedValue(cannedSearch({ results: [{ catalogNumber: '35454' }], user_location: 'ירושלים' }));
+    const r = await svc.chat('יש לי מקט 35454', {});
+    expect(gemini.generateJson).not.toHaveBeenCalled();
+    expect(runSpy).toHaveBeenCalledWith('35454'); // צומצם לקוד עצמו
+    expect(r.context.makat).toBe('35454');
+  });
+
+  it('BUG — "מי מספק את 35454 בירושלים" בתור ראשון → ספקים לפי ירושלים, ללא הבהרה', async () => {
+    const { svc, sx, gemini } = serviceWithCode();
+    jest.spyOn(sx, 'runAiSearch');
+    catalog.getSuppliersForMakt.mockResolvedValue([
+      { modSupplierId: '1', name: 'מרכז רפואי שערי צדק', city: 'ירושלים' },
+    ]);
+    const r = await svc.chat('מי מספק את 35454 בירושלים', {});
+    expect(gemini.generateJson).not.toHaveBeenCalled(); // דילג על שלב ההבנה בזכות הקוד
+    expect(r.intent).toBe('suppliers');
+    expect(catalog.getSuppliersForMakt).toHaveBeenCalledWith('35454');
+    expect(r.context.location).toBe('ירושלים');
+  });
+
+  it('התאמת קוד מדויקת ללא מיקום → מציג מיד, לא שואל על יישוב', async () => {
+    const { svc, sx } = serviceWithCode();
+    jest.spyOn(sx, 'runAiSearch').mockResolvedValue(
+      cannedSearch({
+        results: [{ catalogNumber: '35454', match_type: 'exact_code', supplier_count: 10 }],
+        user_location: null,
+      }),
+    );
+    const r = await svc.chat('35454', {});
+    expect(r.followup).not.toBe('location');
+    expect(r.context.awaitingLocation).toBeFalsy();
+    expect(r.context.makat).toBe('35454');
   });
 });

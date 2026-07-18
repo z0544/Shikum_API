@@ -559,6 +559,24 @@ export class SearchService {
     return items[0]?.catalogNumber ?? null;
   }
 
+  /**
+   * מחלץ מתוך טקסט חופשי את כל המק"טים/קודי-השירות שקיימים במאגר — מכל מקום במשפט.
+   * מועמד = מספר בן 3 ספרות ומעלה, או אסימון אלפאנומרי המכיל ספרה (למשל C2169, T7825).
+   * כל מועמד מאומת מול המאגר (searchByCode), כדי שמספרים אקראיים לא ייחשבו לקוד.
+   */
+  private async extractResolvableCodes(text: string): Promise<string[]> {
+    const raw = (text || '').trim();
+    if (!raw) return [];
+    const candidates = new Set<string>();
+    for (const m of raw.match(/[A-Za-z0-9][A-Za-z0-9-]{2,}/g) || []) {
+      const t = m.replace(/^-+|-+$/g, '');
+      if (/^\d{3,}$/.test(t) || (/[A-Za-z]/.test(t) && /\d/.test(t))) candidates.add(t);
+    }
+    if (!candidates.size) return [];
+    const items = await this.searchByCode([...candidates].join(' '));
+    return [...new Set(items.map((i) => String(i.catalogNumber)))];
+  }
+
   /** מילות כוונה/שאלה שיש להסיר לפני חיפוש מוצר בתוך שאלת ספקים/קשר. */
   private static readonly INTENT_WORDS = [
     'מי', 'מספק', 'מספקים', 'נותן', 'נותנים', 'שירות', 'ספק', 'ספקים', 'מורשה', 'מורשים',
@@ -637,17 +655,16 @@ export class SearchService {
     const followupIntent = this.classifyIntent(message);
     const hasAnchor = !!(ctx.makat || ctx.lastQuery || ctx.product);
 
-    // קלט שהוא מק"ט/קוד שירות מפורש (למשל "35454", "מקט 35454", "C2169") — מזוהה ישירות
-    // מול המאגר ומדלג על שלב ההבנה של Gemini, שאחרת מבקש הבהרה על מספר תקין ("לא זיהיתי את הצורך").
-    const codeCandidate = message.trim().replace(/^(מק"?ט|מקט|קוד|מספר)\s+/i, '').trim();
-    const isBareCode =
-      /^[0-9A-Za-z][0-9A-Za-z-]{1,}$/.test(codeCandidate) &&
-      !/[א-ת]/.test(codeCandidate) &&
-      (await this.searchByCode(codeCandidate)).length > 0;
-    if (isBareCode) query = codeCandidate;
+    // זיהוי דטרמיניסטי של מק"ט/קוד שירות בכל מקום בהודעה (גם מוטמע במשפט עברי):
+    // "35454", "C2169", "יש לי מקט 35454", "מי מספק את 35454 בירושלים". קוד תקין מדלג
+    // על שלב ההבנה של Gemini שאחרת מבקש הבהרה על מספר תקין. לחיפוש טהור מצמצמים לקוד עצמו,
+    // ובכוונת ספקים/קשר משאירים את ההודעה כך שגם המיקום שבה ייחלץ.
+    const resolvedCodes = await this.extractResolvableCodes(message);
+    const hasCode = resolvedCodes.length > 0;
+    if (hasCode && followupIntent === 'search') query = resolvedCodes.join(' ');
 
     const skipUnderstand =
-      ((followupIntent === 'suppliers' || followupIntent === 'contact') && hasAnchor) || isBareCode;
+      ((followupIntent === 'suppliers' || followupIntent === 'contact') && hasAnchor) || hasCode;
 
     // שלב הבנה (רק כש-AI פעיל, לא באמצע המתנה למיקום, ולא בכוונת המשך-ספקים מעוגנת):
     // אם ההודעה מעורפלת / תיאור בעיה — נשאל שאלת הבהרה לפני שמחפשים מק"טים.
@@ -905,14 +922,24 @@ export class SearchService {
     // כאשר הוא מחוץ ל-40 המפורטים, ולא יטען בטעות שספק שקיים אינו ברשימה.
     const supplier_names = allSuppliers.map((s) => (s as any).name).filter(Boolean);
 
-    const data = { intent: base.intent, results, suppliers, supplier_total: allSuppliers.length, supplier_names };
+    const subject_makat = (base.context?.makat as string | undefined) ?? null;
+    const data = {
+      intent: base.intent,
+      subject_makat,
+      results,
+      suppliers,
+      supplier_total: allSuppliers.length,
+      supplier_names,
+    };
     const hasData = results.length > 0 || allSuppliers.length > 0;
 
     const systemInstruction = [
       'אתה העוזר החכם של מערכת השיקום של אגף השיקום.',
       'ענה בעברית, בטון ידידותי, מקצועי ותמציתי (2-4 משפטים).',
+      'קרא את כל היסטוריית השיחה שסופקה והתייחס להקשר. כינויי רמז ("אותו", "זה", "שלו", "שם") מתייחסים למק"ט/מוצר שבמוקד השיחה (subject_makat או האזכור האחרון בהיסטוריה) — ענה לגביו, אל תבקש הבהרה חוזרת על מה שכבר ידוע.',
       'הסתמך אך ורק על הנתונים שסופקו לך (JSON). אל תמציא מק"טים, ספקים, טלפונים או עובדות שאינן בנתונים.',
-      'supplier_names היא רשימת כל הספקים המורשים למק"ט (המלאה); suppliers מפרט את 40 הראשונים. אם supplier_total>0 קיימים ספקים — לעולם אל תאמר שאין ספקים או שאין בית חולים/מרכז שמספק את השירות.',
+      'supplier_names היא רשימת כל הספקים המורשים למק"ט (המלאה); suppliers מפרט את 40 הראשונים עם עיר וקרבה. אם supplier_total>0 קיימים ספקים — לעולם אל תאמר שאין ספקים או שאין בית חולים/מרכז שמספק את השירות.',
+      'אם המשתמש ביקש ספקים במחוז/עיר מסוימים — הדגש את הספקים באותו אזור (לפי שדה city/proximity) אך אל תטען שאין אחרים; הספקים כבר מדורגים לפי קרבה.',
       'אם נשאלת אם ספק/בית חולים מסוים מספק את השירות — בדוק את שמו מול supplier_names (התאמה חלקית מספיקה); אם הוא מופיע, אשר זאת במפורש. אל תסנן ספקים לפי סוג (בית חולים/מכון/יחיד).',
       'אל תמציא מחירים או זמינות. אם באמת אין נתונים (supplier_total=0 ואין תוצאות), אמור זאת בכנות והצע לנסח מחדש או לבחור קטגוריה.',
       'אל תחזור על רשימת התוצאות באופן מלא — הן מוצגות בכרטיסים נפרדים. סכם והכוון את המשתמש.',
@@ -1041,8 +1068,13 @@ export class SearchService {
       };
     }
     ctx.makat = (res.results[0]?.catalogNumber as string) ?? null;
-    // אם אין מיקום — שאלת הכוונה על יישוב
-    if (!res.user_location) {
+    // התאמת קוד מדויקת (מק"ט/קוד שירות) — מציגים ישירות את המק"ט והספקים,
+    // בלי לשאול על יישוב (המשתמש כבר יודע בדיוק מה הוא רוצה).
+    const isCodeMatch = (res.results as Record<string, unknown>[]).some(
+      (r) => r.match_type === 'exact_code',
+    );
+    // אם אין מיקום ואין התאמת קוד — שאלת הכוונה על יישוב
+    if (!res.user_location && !isCodeMatch) {
       ctx.product = text;
       ctx.awaitingLocation = true;
       const terms = res.parsed.product_terms.join(', ') || text;
