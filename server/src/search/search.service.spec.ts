@@ -55,6 +55,15 @@ describe('SearchService — פירוק וסיווג (טהור)', () => {
     expect(p.location_normalized).toBe('חיפה');
   });
 
+  it('parseSmartQuery — מסנן מספרים בודדים ומילות מצב/זכאות אישיות', () => {
+    const p = s.parseSmartQuery('אני נכה 80% עם 2 פציעות גפיים רוצה טיפול פסיכולוגי');
+    expect(p.product_terms).toContain('טיפול');
+    expect(p.product_terms).toContain('פסיכולוגי');
+    expect(p.product_terms).not.toContain('80'); // מספר בודד — מייצר התאמות-שווא ("80" בתוך "180")
+    expect(p.product_terms).not.toContain('נכה'); // מצב אישי, לא מוצר
+    expect(p.product_terms).not.toContain('פציעות');
+  });
+
   it('stripIntentWords — מסיר מילות כוונה ופיסוק', () => {
     expect(s.stripIntentWords('מי מספק כיסא גלגלים?')).toBe('כיסא גלגלים');
     expect(s.stripIntentWords('מה הטלפון?')).toBe('');
