@@ -125,7 +125,7 @@ export function SuppliersPanel({
                     return (
                       <Fragment key={s.modSupplierId}>
                         <tr
-                          className="sup-row"
+                          className={`sup-row${details.length ? '' : ' sup-row-static'}`}
                           onClick={() => details.length && toggle(s.modSupplierId)}
                         >
                           <td>{s.name || '—'}</td>
@@ -137,7 +137,18 @@ export function SuppliersPanel({
                           <td>{s.profession || '—'}</td>
                           <td className="sup-caret">
                             {details.length ? (
-                              <Icon name={open ? 'chevron-up' : 'chevron-down'} />
+                              <button
+                                type="button"
+                                className="sup-toggle"
+                                aria-expanded={open}
+                                aria-label={`${open ? 'הסתר' : 'הצג'} פרטי הספק ${s.name || ''}`.trim()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggle(s.modSupplierId);
+                                }}
+                              >
+                                <Icon name={open ? 'chevron-up' : 'chevron-down'} />
+                              </button>
                             ) : null}
                           </td>
                         </tr>

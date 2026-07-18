@@ -206,6 +206,34 @@ body {
   padding: 10px 22px;
 }
 .breadcrumbs b { color: var(--brand); }
+.crumb-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.crumb-link:hover { color: var(--brand); }
+.crumb-sep { color: var(--muted); }
+
+/* קישור דילוג לתוכן (מוצג רק בפוקוס מקלדת) */
+.skip-link {
+  position: fixed;
+  top: -60px;
+  inset-inline-start: 12px;
+  z-index: 200;
+  background: var(--brand);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 0 0 10px 10px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: top 0.15s;
+}
+.skip-link:focus-visible { top: 0; }
 
 /* ===== Layout ===== */
 main {
@@ -417,6 +445,17 @@ input:focus, select:focus, textarea:focus {
 .sup-row { cursor: pointer; }
 .sup-row:hover td { background: var(--hover); }
 .sup-caret { text-align: center; color: var(--muted); font-size: 11px; }
+.sup-toggle {
+  background: none;
+  border: 0;
+  padding: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+}
+.sup-toggle:hover { background: var(--hover); color: var(--brand); }
 .sup-detail-row > td { background: var(--table-zone); padding: 12px 16px; }
 .sup-detail-row .detail-grid { margin: 0; }
 
@@ -747,7 +786,8 @@ table.data tbody tr.nearest { background: var(--success-bg); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.chat-ac-item:hover { background: var(--hover); color: var(--brand); }
+.chat-ac-item:hover,
+.chat-ac-item.active { background: var(--hover); color: var(--brand); }
 .chat-chip {
   background: var(--panel);
   border: 1px solid var(--brand-2);
@@ -970,7 +1010,8 @@ table.data tbody tr.nearest { background: var(--success-bg); }
   text-overflow: ellipsis;
 }
 .ac-item:last-child { border-bottom: 0; }
-.ac-item:hover { background: var(--hover); color: var(--brand); }
+.ac-item:hover,
+.ac-item.active { background: var(--hover); color: var(--brand); }
 
 /* ===== הדגשת התאמות ===== */
 mark.hl { background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 1px; }

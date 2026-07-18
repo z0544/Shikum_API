@@ -59,16 +59,28 @@ export function Header() {
 }
 
 export function Breadcrumbs({ trail }: { trail: string[] }) {
+  const { goHome } = useApp();
   return (
-    <div className="breadcrumbs">
+    <nav className="breadcrumbs" aria-label="מיקום">
       <div>
-        {trail.map((t, i) => (
-          <span key={i}>
-            {i > 0 && ' / '}
-            {i === trail.length - 1 ? <b>{t}</b> : t}
-          </span>
-        ))}
+        {trail.map((t, i) => {
+          const isLast = i === trail.length - 1;
+          return (
+            <span key={i}>
+              {i > 0 && <span className="crumb-sep"> / </span>}
+              {i === 0 ? (
+                <button className="crumb-link" onClick={goHome}>
+                  {t}
+                </button>
+              ) : isLast ? (
+                <b aria-current="page">{t}</b>
+              ) : (
+                t
+              )}
+            </span>
+          );
+        })}
       </div>
-    </div>
+    </nav>
   );
 }

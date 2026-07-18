@@ -4,7 +4,7 @@ import type { ItemDetail } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { SuppliersPanel } from './SuppliersPanel';
 import { Icon } from './icons';
-import { useDialogDismiss } from '../hooks/useDialogDismiss';
+import { Dialog } from './Dialog';
 
 const FIELD_LABELS: [keyof ItemDetail, string][] = [
   ['catalogNumber', 'מק"ט'],
@@ -187,37 +187,26 @@ function ApiCurlDialog({
   onCopy: () => void;
   onClose: () => void;
 }) {
-  const dialogRef = useDialogDismiss<HTMLDivElement>(onClose);
   return (
-    <div className="popup-overlay" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        className="popup-modal curl-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="cURL — קריאות API"
-      >
-        <div className="popup-head">
-          <h3>cURL — המרת מק"ט ↔ קוד מב"ר</h3>
-          <button className="chat-close" onClick={onClose} aria-label="סגור">
-            <Icon name="close" />
-          </button>
-        </div>
-        <p className="hint" style={{ marginTop: 0 }}>
-          כתובות ה-API להמרה דו-כיוונית בין מק"ט לקוד מב"ר — לצפייה, העתקה ואינטגרציה.
-        </p>
-        <pre className="curl-block">{curl}</pre>
-        <div className="chat-report-actions">
-          <button className="btn btn-primary btn-sm" onClick={onCopy}>
-            <Icon name="copy" /> העתק
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
-            סגור
-          </button>
-        </div>
+    <Dialog onClose={onClose} ariaLabel="cURL — קריאות API" modalClass="popup-modal curl-modal">
+      <div className="popup-head">
+        <h3>cURL — המרת מק"ט ↔ קוד מב"ר</h3>
+        <button className="chat-close" onClick={onClose} aria-label="סגור">
+          <Icon name="close" />
+        </button>
       </div>
-    </div>
+      <p className="hint" style={{ marginTop: 0 }}>
+        כתובות ה-API להמרה דו-כיוונית בין מק"ט לקוד מב"ר — לצפייה, העתקה ואינטגרציה.
+      </p>
+      <pre className="curl-block">{curl}</pre>
+      <div className="chat-report-actions">
+        <button className="btn btn-primary btn-sm" onClick={onCopy}>
+          <Icon name="copy" /> העתק
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>
+          סגור
+        </button>
+      </div>
+    </Dialog>
   );
 }

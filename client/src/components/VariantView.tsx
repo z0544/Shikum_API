@@ -74,7 +74,7 @@ export function VariantView() {
   return (
     <>
       <Breadcrumbs trail={['דף הבית', 'תצוגת וריאנט', variantId || '—']} />
-      <main>
+      <main id="maincontent">
         <section className="card">
           <div className="search-row">
             <div className="field grow">

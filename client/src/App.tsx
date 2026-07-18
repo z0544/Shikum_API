@@ -12,6 +12,9 @@ export function App() {
   const { view, popupVariant } = useApp();
   return (
     <div className="app">
+      <a href="#maincontent" className="skip-link">
+        דלג לתוכן הראשי
+      </a>
       <Header />
       {view === 'search' ? (
         <SearchView />

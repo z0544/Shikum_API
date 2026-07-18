@@ -117,7 +117,7 @@ export function ApiView() {
   return (
     <>
       <Breadcrumbs trail={['דף הבית', 'API — ממשק תכנותי']} />
-      <main>
+      <main id="maincontent">
         <section className="card">
           <div className="panel-head">
             <h2>API — ממשק תכנותי</h2>

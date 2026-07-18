@@ -114,7 +114,7 @@ export function AdminView() {
   return (
     <>
       <Breadcrumbs trail={['דף הבית', 'ניהול וטעינת נתונים']} />
-      <main>
+      <main id="maincontent">
         <section className="card">
           <div className="panel-head">
             <h2>אסימון ניהול</h2>
@@ -157,6 +157,9 @@ export function AdminView() {
 
               <div
                 className={`dropzone${drag ? ' drag' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-label="גרור לכאן קובץ XLSX / CSV או לחץ לבחירה"
                 onDragOver={(e) => {
                   e.preventDefault();
                   setDrag(true);
@@ -168,6 +171,12 @@ export function AdminView() {
                   if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
                 }}
                 onClick={() => document.getElementById('fileInput')?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    document.getElementById('fileInput')?.click();
+                  }
+                }}
               >
                 {file ? (
                   <b>📄 {file.name}</b>

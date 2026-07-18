@@ -6,7 +6,7 @@ import { Breadcrumbs } from './Header';
 import { DetailPanel } from './DetailPanel';
 import { Highlight } from './Highlight';
 import { Icon } from './icons';
-import { useDialogDismiss } from '../hooks/useDialogDismiss';
+import { Dialog } from './Dialog';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
 const MATCH_OPTS = [
@@ -83,6 +83,7 @@ export function SearchView() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [suggests, setSuggests] = useState<string[]>([]);
+  const [acIndex, setAcIndex] = useState(-1);
   const [showCurl, setShowCurl] = useState(false);
   const lastInjected = useRef<string | null>(null);
   const suggestTimer = useRef<number>();
@@ -115,6 +116,7 @@ export function SearchView() {
 
   function onQueryChange(value: string) {
     setQ(value);
+    setAcIndex(-1);
     window.clearTimeout(suggestTimer.current);
     const v = value.trim();
     if (v.length < 2) {
@@ -186,6 +188,39 @@ export function SearchView() {
     }
   }
 
+  function pickSuggestion(s: string) {
+    setQ(s);
+    setSuggests([]);
+    setAcIndex(-1);
+    search(s);
+  }
+
+  function onSearchKeyDown(e: React.KeyboardEvent) {
+    if (suggests.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setAcIndex((i) => (i + 1) % suggests.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setAcIndex((i) => (i <= 0 ? suggests.length - 1 : i - 1));
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSuggests([]);
+        setAcIndex(-1);
+        return;
+      }
+      if (e.key === 'Enter' && acIndex >= 0 && acIndex < suggests.length) {
+        e.preventDefault();
+        pickSuggestion(suggests[acIndex]);
+        return;
+      }
+    }
+    if (e.key === 'Enter') search();
+  }
+
   function toggle(makt: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -227,7 +262,7 @@ export function SearchView() {
   return (
     <>
       <Breadcrumbs trail={['דף הבית', 'חיפוש מק"טים וספקים']} />
-      <main>
+      <main id="maincontent">
         <section className="card">
           <div className="mode-toggle" role="tablist" aria-label="מצב חיפוש">
             <button
@@ -250,11 +285,11 @@ export function SearchView() {
 
           <div className="search-row">
             <div className="field grow search-field">
-              <label>{mode === 'smart' ? 'תיאור חופשי' : 'חיפוש'}</label>
+              <label id="search-label">{mode === 'smart' ? 'תיאור חופשי' : 'חיפוש'}</label>
               <input
                 value={q}
                 onChange={(e) => onQueryChange(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
+                onKeyDown={onSearchKeyDown}
                 onBlur={() => window.setTimeout(() => setSuggests([]), 120)}
                 placeholder={
                   mode === 'smart'
@@ -262,18 +297,26 @@ export function SearchView() {
                     : 'מק"ט, תיאור פריט, שם ספק…'
                 }
                 type="search"
+                role="combobox"
+                aria-expanded={suggests.length > 0}
+                aria-controls="search-ac-list"
+                aria-autocomplete="list"
+                aria-activedescendant={acIndex >= 0 ? `search-ac-${acIndex}` : undefined}
+                aria-labelledby="search-label"
               />
               {suggests.length > 0 && (
-                <div className="autocomplete">
-                  {suggests.map((s) => (
+                <div className="autocomplete" role="listbox" id="search-ac-list" aria-label="הצעות">
+                  {suggests.map((s, i) => (
                     <button
                       key={s}
-                      className="ac-item"
+                      id={`search-ac-${i}`}
+                      role="option"
+                      aria-selected={i === acIndex}
+                      className={`ac-item${i === acIndex ? ' active' : ''}`}
                       title={s}
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        setQ(s);
-                        search(s);
+                        pickSuggestion(s);
                       }}
                     >
                       {s}
@@ -377,7 +420,17 @@ export function SearchView() {
                       <div
                         className={`variant-row${v.entityId === selected ? ' active' : ''}`}
                         key={v.entityId}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={!narrow && v.entityId === selected}
+                        aria-label={`וריאנט ${v.entityId}`}
                         onClick={() => (narrow ? openVariant(v.entityId) : setSelected(v.entityId))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            narrow ? openVariant(v.entityId) : setSelected(v.entityId);
+                          }
+                        }}
                       >
                         <span className="vid">{v.entityId}</span>
                         <span className="spacer" />
@@ -429,38 +482,27 @@ function CurlDialog({
   onCopy: () => void;
   onClose: () => void;
 }) {
-  const dialogRef = useDialogDismiss<HTMLDivElement>(onClose);
   return (
-    <div className="popup-overlay" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        className="popup-modal curl-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="פקודת cURL"
-      >
-        <div className="popup-head">
-          <h3>cURL — קריאת ה-API</h3>
-          <button className="chat-close" onClick={onClose} aria-label="סגור">
-            <Icon name="close" />
-          </button>
-        </div>
-        <p className="hint" style={{ marginTop: 0 }}>
-          פקודת cURL לקריאת ה-API של החיפוש הנוכחי — לייחצון ואינטגרציה.
-        </p>
-        <pre className="curl-block">{curl}</pre>
-        <div className="chat-report-actions">
-          <button className="btn btn-primary btn-sm" onClick={onCopy}>
-            <Icon name="copy" /> העתק פקודה
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
-            סגור
-          </button>
-        </div>
+    <Dialog onClose={onClose} ariaLabel="פקודת cURL" modalClass="popup-modal curl-modal">
+      <div className="popup-head">
+        <h3>cURL — קריאת ה-API</h3>
+        <button className="chat-close" onClick={onClose} aria-label="סגור">
+          <Icon name="close" />
+        </button>
       </div>
-    </div>
+      <p className="hint" style={{ marginTop: 0 }}>
+        פקודת cURL לקריאת ה-API של החיפוש הנוכחי — לייחצון ואינטגרציה.
+      </p>
+      <pre className="curl-block">{curl}</pre>
+      <div className="chat-report-actions">
+        <button className="btn btn-primary btn-sm" onClick={onCopy}>
+          <Icon name="copy" /> העתק פקודה
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>
+          סגור
+        </button>
+      </div>
+    </Dialog>
   );
 }
 

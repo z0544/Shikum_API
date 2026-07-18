@@ -4,7 +4,7 @@ import type { AiResult, ChatContext, Supplier } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { Icon } from './icons';
 import { normalizePhone, telHref } from '../format';
-import { useDialogDismiss } from '../hooks/useDialogDismiss';
+import { Dialog } from './Dialog';
 
 interface Msg {
   id: number;
@@ -106,6 +106,7 @@ export function ChatBot() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [suggests, setSuggests] = useState<string[]>([]);
+  const [acIndex, setAcIndex] = useState(-1);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [pendingIntent, setPendingIntent] = useState<Intent | null>(null);
   const [catalogCount, setCatalogCount] = useState<number | null>(null);
@@ -268,6 +269,7 @@ export function ChatBot() {
 
   function onInputChange(value: string) {
     setInput(value);
+    setAcIndex(-1);
     window.clearTimeout(suggestTimer.current);
     const v = value.trim();
     if (v.length < 2) {
@@ -279,6 +281,34 @@ export function ChatBot() {
       const r = await api.suggest(v);
       if (seq === suggestSeq.current) setSuggests(r); // מתעלמים מתשובות שאיחרו
     }, 200);
+  }
+
+  function onInputKeyDown(e: React.KeyboardEvent) {
+    if (suggests.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setAcIndex((i) => (i + 1) % suggests.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setAcIndex((i) => (i <= 0 ? suggests.length - 1 : i - 1));
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSuggests([]);
+        setAcIndex(-1);
+        return;
+      }
+      if (e.key === 'Enter' && acIndex >= 0 && acIndex < suggests.length) {
+        e.preventDefault();
+        const s = suggests[acIndex];
+        setAcIndex(-1);
+        send(s);
+        return;
+      }
+    }
+    if (e.key === 'Enter') send(input);
   }
 
   function newConversation() {
@@ -489,9 +519,21 @@ export function ChatBot() {
           </div>
 
           {suggests.length > 0 ? (
-            <div className="chat-autocomplete">
-              {suggests.map((s) => (
-                <button key={s} className="chat-ac-item" onClick={() => send(s)} title={s}>
+            <div className="chat-autocomplete" role="listbox" id="chat-ac-list" aria-label="הצעות">
+              {suggests.map((s, i) => (
+                <button
+                  key={s}
+                  id={`chat-ac-${i}`}
+                  role="option"
+                  aria-selected={i === acIndex}
+                  className={`chat-ac-item${i === acIndex ? ' active' : ''}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setAcIndex(-1);
+                    send(s);
+                  }}
+                  title={s}
+                >
                   {s}
                 </button>
               ))}
@@ -533,9 +575,14 @@ export function ChatBot() {
             <input
               value={input}
               onChange={(e) => onInputChange(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && send(input)}
+              onKeyDown={onInputKeyDown}
               placeholder="כתבו הודעה או צרפו מסמך…"
               aria-label="הודעה"
+              role="combobox"
+              aria-expanded={suggests.length > 0}
+              aria-controls="chat-ac-list"
+              aria-autocomplete="list"
+              aria-activedescendant={acIndex >= 0 ? `chat-ac-${acIndex}` : undefined}
             />
             <button className="btn btn-primary btn-sm" onClick={() => send(input)} disabled={loading}>
               שלח
@@ -579,47 +626,41 @@ function ReportDialog({
   onCopy: (codes: string[]) => void;
   onClose: () => void;
 }) {
-  const dialogRef = useDialogDismiss<HTMLDivElement>(onClose);
   return (
-    <div className="chat-report-overlay" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        className="chat-report-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="דיווח על קודים שלא נמצאו"
-      >
-        <div className="chat-report-head">
-          <h3>דיווח על קודים שלא נמצאו</h3>
-          <button className="chat-close" onClick={onClose} aria-label="סגור">
-            <Icon name="close" />
-          </button>
-        </div>
-        <p className="chat-report-sub">
-          הקודים הבאים חולצו ממסמך ההפניה אך אינם קיימים במאגר. הדיווח יישלח לטיפול מנהל המערכת.
-        </p>
-        <ul className="chat-report-list">
-          {codes.map((c) => (
-            <li key={c}>
-              <span className="chip amber">{c}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="chat-report-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => onSendEmail(codes)}>
-            <Icon name="mail" /> שלח מייל
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => onCopy(codes)}>
-            העתק פרטים
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
-            ביטול
-          </button>
-        </div>
-        <p className="chat-report-foot">יישלח אל: {email}</p>
+    <Dialog
+      onClose={onClose}
+      ariaLabel="דיווח על קודים שלא נמצאו"
+      overlayClass="chat-report-overlay"
+      modalClass="chat-report-modal"
+    >
+      <div className="chat-report-head">
+        <h3>דיווח על קודים שלא נמצאו</h3>
+        <button className="chat-close" onClick={onClose} aria-label="סגור">
+          <Icon name="close" />
+        </button>
       </div>
-    </div>
+      <p className="chat-report-sub">
+        הקודים הבאים חולצו ממסמך ההפניה אך אינם קיימים במאגר. הדיווח יישלח לטיפול מנהל המערכת.
+      </p>
+      <ul className="chat-report-list">
+        {codes.map((c) => (
+          <li key={c}>
+            <span className="chip amber">{c}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="chat-report-actions">
+        <button className="btn btn-primary btn-sm" onClick={() => onSendEmail(codes)}>
+          <Icon name="mail" /> שלח מייל
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => onCopy(codes)}>
+          העתק פרטים
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>
+          ביטול
+        </button>
+      </div>
+      <p className="chat-report-foot">יישלח אל: {email}</p>
+    </Dialog>
   );
 }
