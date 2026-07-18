@@ -620,6 +620,7 @@ table.data tbody tr.nearest { background: var(--success-bg); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .loading-row { text-align: center; color: var(--muted); padding: 20px; }
+.load-more-row { text-align: center; padding: 14px 0 4px; }
 
 /* פס טעינה עדין לחיפוש חוזר (כשכבר מוצגות תוצאות) */
 .reloading-bar {

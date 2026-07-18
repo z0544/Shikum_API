@@ -250,8 +250,12 @@ export function AdminView() {
                     </div>
                   </div>
                   <PlanTable title="עודכנו (כולל שינויי שדות)" rows={plan.updated} showChanges />
-                  <PlanTable title="חדשים" rows={plan.new.slice(0, 100)} />
-                  <PlanTable title="הוסרו (Soft Delete)" rows={plan.deleted.slice(0, 100)} />
+                  <PlanTable title="חדשים" rows={plan.new.slice(0, 100)} total={plan.new.length} />
+                  <PlanTable
+                    title="הוסרו (Soft Delete)"
+                    rows={plan.deleted.slice(0, 100)}
+                    total={plan.deleted.length}
+                  />
                 </>
               )}
             </section>
@@ -317,16 +321,22 @@ export function AdminView() {
 function PlanTable({
   title,
   rows,
+  total,
   showChanges,
 }: {
   title: string;
   rows: SyncPlan['updated'];
+  total?: number;
   showChanges?: boolean;
 }) {
   if (!rows.length) return null;
+  const truncated = total !== undefined && total > rows.length;
   return (
     <div style={{ marginTop: 14 }}>
-      <h3 style={{ fontSize: 15, color: 'var(--brand-dark)' }}>{title} ({rows.length})</h3>
+      <h3 style={{ fontSize: 15, color: 'var(--brand-dark)' }}>
+        {title} ({total ?? rows.length})
+        {truncated && <span className="hint"> · מוצגות {rows.length} ראשונות</span>}
+      </h3>
       <div className="table-wrap">
         <table className="data">
           <thead>

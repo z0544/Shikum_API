@@ -16,15 +16,13 @@ export function App() {
         דלג לתוכן הראשי
       </a>
       <Header />
-      {view === 'search' ? (
-        <SearchView />
-      ) : view === 'variant' ? (
-        <VariantView />
-      ) : view === 'api' ? (
-        <ApiView />
-      ) : (
-        <AdminView />
-      )}
+      {/* SearchView נשאר מותקן (מוסתר) כדי לשמר תוצאות/בחירה במעבר בין מסכים וחזרה */}
+      <div hidden={view !== 'search'}>
+        <SearchView active={view === 'search'} />
+      </div>
+      {view === 'variant' && <VariantView />}
+      {view === 'api' && <ApiView />}
+      {view === 'admin' && <AdminView />}
       <Toast />
       <ChatBot />
       {popupVariant && <VariantDialog entityId={popupVariant} />}

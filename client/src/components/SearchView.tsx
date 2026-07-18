@@ -66,7 +66,7 @@ function fromAiResult(r: AiResult): UniGroup {
   };
 }
 
-export function SearchView() {
+export function SearchView({ active = true }: { active?: boolean }) {
   const { showToast, openVariant, searchQuery, resetSignal } = useApp();
   const narrow = useMediaQuery('(max-width: 900px)');
   const [q, setQ] = useState('');
@@ -82,6 +82,7 @@ export function SearchView() {
   const [resultParams, setResultParams] = useState<{ mode: Mode; match: string; field: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  const [limit, setLimit] = useState(100);
   const [suggests, setSuggests] = useState<string[]>([]);
   const [acIndex, setAcIndex] = useState(-1);
   const [showCurl, setShowCurl] = useState(false);
@@ -109,7 +110,7 @@ export function SearchView() {
     if (searchQuery && searchQuery !== lastInjected.current) {
       lastInjected.current = searchQuery;
       setQ(searchQuery);
-      search(searchQuery, 'exact');
+      search(searchQuery, mode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
@@ -130,8 +131,10 @@ export function SearchView() {
     }, 200);
   }
 
-  async function search(queryArg?: string, modeArg?: Mode) {
+  async function search(queryArg?: string, modeArg?: Mode, limitArg?: number) {
     const useMode = modeArg ?? mode;
+    const useLimit = limitArg ?? 100;
+    setLimit(useLimit);
     const term = (queryArg ?? q).trim();
     window.clearTimeout(suggestTimer.current);
     suggestSeq.current++;
@@ -152,7 +155,7 @@ export function SearchView() {
         if (!data.count) showToast(data.message || 'לא נמצאו תוצאות', 'info');
       } else {
         try {
-          const data = await api.searchItems({ q: term, match, field });
+          const data = await api.searchItems({ q: term, match, field, limit: useLimit });
           uni = (data.groups || []).map(fromMaktGroup);
           setMeta({ count: data.group_count ?? 0 });
         } catch (e) {
@@ -163,6 +166,8 @@ export function SearchView() {
           const ai = await api.aiSearch(term);
           uni = ai.results.map(fromAiResult);
           ranMode = 'smart';
+          // מיישרים את הטוגל למצב שרץ בפועל, כדי שלא יוצג "מדויק" על תוצאות חכמות
+          if (ai.count) setMode('smart');
           setMeta({
             count: ai.count,
             explanation: ai.count
@@ -262,7 +267,7 @@ export function SearchView() {
   return (
     <>
       <Breadcrumbs trail={['דף הבית', 'חיפוש מק"טים וספקים']} />
-      <main id="maincontent">
+      <main id={active ? 'maincontent' : undefined}>
         <section className="card">
           <div className="mode-toggle" role="tablist" aria-label="מצב חיפוש">
             <button
@@ -456,6 +461,20 @@ export function SearchView() {
               );
             })}
             </div>
+            {groups && groups.length >= limit && resultParams?.mode === 'exact' && (
+              <div className="load-more-row">
+                <p className="hint" style={{ margin: '0 0 8px' }}>
+                  מוצגות {groups.length} קבוצות · ייתכנו נוספות
+                </p>
+                <button
+                  className="btn btn-ghost"
+                  disabled={loading}
+                  onClick={() => search(searchedQuery, 'exact', limit + 100)}
+                >
+                  {loading ? <span className="spinner" /> : 'טען עוד תוצאות'}
+                </button>
+              </div>
+            )}
           </section>
 
           {!narrow && (
