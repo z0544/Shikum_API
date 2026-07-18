@@ -108,6 +108,7 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
 /* ===== Header (כחול כהה) ===== */
@@ -123,10 +124,15 @@ body {
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 0 20px;
-  height: 60px;
+  padding: 10px 20px;
+  min-height: 60px;
   max-width: 1400px;
   margin: 0 auto;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .brand {
   display: flex;
@@ -147,7 +153,6 @@ body {
   display: flex;
   gap: 4px;
   margin-inline-start: auto;
-  flex-wrap: wrap;
 }
 .nav button {
   background: transparent;
@@ -168,6 +173,24 @@ body {
   background: var(--brand-dark);
   border-radius: 10px;
   font-size: 20px;
+  flex: 0 0 auto;
+}
+
+/* מובייל/מסך צר: הכותרת נשברת לשתי שורות — מותג+פעולות למעלה, טאבים כרצועה נגללת מתחת */
+@media (max-width: 900px) {
+  .header-bar { flex-wrap: wrap; gap: 10px; }
+  .brand { order: 1; font-size: 18px; }
+  .header-actions { order: 2; margin-inline-start: auto; }
+  .nav {
+    order: 3;
+    flex-basis: 100%;
+    margin-inline-start: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+  }
+  .nav button { white-space: nowrap; flex: 0 0 auto; }
 }
 
 /* ===== Breadcrumbs ===== */
@@ -231,6 +254,16 @@ main {
 
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; }
+}
+/* דסקטופ: פאנל הפרטים נשאר גלוי (sticky) בזמן גלילת התוצאות */
+@media (min-width: 901px) {
+  .detail-col {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+  }
 }
 
 /* ===== Fields / buttons ===== */
@@ -313,9 +346,14 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
   padding: 12px 14px;
   cursor: pointer;
   background: var(--panel);
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  border: 0;
 }
 .group-head:hover { background: var(--hover); }
 .makt-badge {
@@ -868,7 +906,6 @@ table.data tbody tr.nearest { background: var(--success-bg); }
   font-size: 18px;
   display: grid;
   place-items: center;
-  margin-inline-start: 8px;
   transition: background 0.15s;
 }
 .theme-toggle:hover { background: rgba(255, 255, 255, 0.28); }

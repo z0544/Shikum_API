@@ -40,17 +40,19 @@ export function Header() {
             API
           </button>
         </nav>
-        <button
-          className="theme-toggle"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'מצב בהיר' : 'מצב כהה'}
-          aria-label={theme === 'dark' ? 'עבור למצב בהיר' : 'עבור למצב כהה'}
-        >
-          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-        </button>
-        <button className="home-box" title="דף הבית (איפוס)" aria-label="דף הבית" onClick={goHome}>
-          <Icon name="home" />
-        </button>
+        <div className="header-actions">
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'מצב בהיר' : 'מצב כהה'}
+            aria-label={theme === 'dark' ? 'עבור למצב בהיר' : 'עבור למצב כהה'}
+          >
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+          </button>
+          <button className="home-box" title="דף הבית (איפוס)" aria-label="דף הבית" onClick={goHome}>
+            <Icon name="home" />
+          </button>
+        </div>
       </div>
     </header>
   );

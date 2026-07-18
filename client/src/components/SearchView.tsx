@@ -7,6 +7,7 @@ import { DetailPanel } from './DetailPanel';
 import { Highlight } from './Highlight';
 import { Icon } from './icons';
 import { useDialogDismiss } from '../hooks/useDialogDismiss';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 const MATCH_OPTS = [
   ['contains', 'מכיל'],
@@ -67,6 +68,7 @@ function fromAiResult(r: AiResult): UniGroup {
 
 export function SearchView() {
   const { showToast, openVariant, searchQuery, resetSignal } = useApp();
+  const narrow = useMediaQuery('(max-width: 900px)');
   const [q, setQ] = useState('');
   const [mode, setMode] = useState<Mode>('exact');
   const [match, setMatch] = useState('contains');
@@ -375,7 +377,7 @@ export function SearchView() {
                       <div
                         className={`variant-row${v.entityId === selected ? ' active' : ''}`}
                         key={v.entityId}
-                        onClick={() => setSelected(v.entityId)}
+                        onClick={() => (narrow ? openVariant(v.entityId) : setSelected(v.entityId))}
                       >
                         <span className="vid">{v.entityId}</span>
                         <span className="spacer" />
@@ -403,9 +405,11 @@ export function SearchView() {
             </div>
           </section>
 
-          <div>
-            <DetailPanel entityId={selected} />
-          </div>
+          {!narrow && (
+            <div className="detail-col">
+              <DetailPanel entityId={selected} />
+            </div>
+          )}
         </div>
       </main>
 
