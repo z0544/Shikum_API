@@ -910,7 +910,12 @@ export class SearchService {
       supplier_count: r.supplier_count,
       nearest_supplier: (r.nearest_supplier as { name?: string } | null)?.name ?? null,
     }));
-    const allSuppliers = base.suppliers ?? [];
+    // בכוונת חיפוש אין רשימת ספקים עליונה — הספקים יושבים בתוך התוצאה המובילה.
+    // מעגנים אותם כדי ש-Gemini "יראה" שקיימים ספקים ולא יטען בטעות שאין.
+    const allSuppliers =
+      base.suppliers && base.suppliers.length
+        ? base.suppliers
+        : ((base.results?.[0]?.suppliers as Record<string, unknown>[]) ?? []);
     const suppliers = allSuppliers.slice(0, 40).map((s) => ({
       name: (s as any).name ?? null,
       phone: (s as any).mobile || (s as any).workPhone || (s as any).landline || null,
