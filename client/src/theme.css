@@ -347,10 +347,34 @@ input:focus, select:focus, textarea:focus {
 .btn-green:hover:not(:disabled) { background: var(--green-dark); }
 .btn-ghost { background: var(--surface-2); color: var(--brand-dark); }
 .btn-ghost:hover:not(:disabled) { background: var(--table-head); }
+.btn-danger { background: var(--danger-ink); color: #fff; }
+.btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 
 .hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
 .empty-state { color: var(--muted); text-align: center; padding: 28px 10px; }
+
+/* מצב שגיאה אחיד (עם ניסיון חוזר) */
+.error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 22px 12px;
+  color: var(--danger-ink);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-ink);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.error-state .btn { color: var(--ink); }
+
+/* דיאלוג אישור */
+.confirm-modal { width: 420px; }
+.confirm-body { padding: 20px; }
+.confirm-title { margin: 0 0 8px; font-size: 17px; color: var(--brand-dark); }
+.confirm-message { margin: 0 0 16px; color: var(--ink); line-height: 1.55; }
 
 /* ===== Smart search card ===== */
 .smart-card { border-inline-start: 4px solid var(--green); }

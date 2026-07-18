@@ -23,7 +23,9 @@ export type IconName =
   | 'send'
   | 'sun'
   | 'moon'
-  | 'link';
+  | 'link'
+  | 'file'
+  | 'logo';
 
 const PATHS: Record<IconName, JSX.Element> = {
   search: (
@@ -113,6 +115,18 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <path d="M10 14a5 5 0 0 1 0-7l2-2a5 5 0 0 1 7 7l-1 1" />
       <path d="M14 10a5 5 0 0 1 0 7l-2 2a5 5 0 0 1-7-7l1-1" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" />
+      <path d="M14 3v4h4" />
+    </>
+  ),
+  logo: (
+    <>
+      <path d="M12 2.5l9.5 9.5-9.5 9.5L2.5 12z" />
+      <path d="M12 8l4 4-4 4-4-4z" />
     </>
   ),
 };

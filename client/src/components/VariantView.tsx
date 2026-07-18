@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp, popupHash } from '../state/AppContext';
 import { Breadcrumbs } from './Header';
 import { DetailPanel } from './DetailPanel';
+import { Dialog } from './Dialog';
 import { Icon } from './icons';
 
 /**
@@ -12,6 +13,7 @@ export function VariantView() {
   const { variantId, openVariant, setView, showToast } = useApp();
   const [input, setInput] = useState(variantId ?? '');
   const [catalogNumber, setCatalogNumber] = useState<string | null>(null);
+  const [linkFallback, setLinkFallback] = useState<string | null>(null);
 
   // סנכרון תיבת הקלט עם המזהה שב-URL (למשל בעת הגעה מ-deep-link).
   useEffect(() => {
@@ -54,8 +56,8 @@ export function VariantView() {
       }
       showToast(okMsg, 'ok');
     } catch {
-      // דפדפנים ללא הרשאת clipboard (למשל ללא HTTPS) — נפילה חלופה לבחירה ידנית.
-      window.prompt('העתק את הקישור:', url);
+      // דפדפנים ללא הרשאת clipboard (למשל ללא HTTPS) — הצגת הקישור להעתקה ידנית.
+      setLinkFallback(url);
     }
   }
 
@@ -123,6 +125,38 @@ export function VariantView() {
           </section>
         )}
       </main>
+
+      {linkFallback && (
+        <Dialog
+          onClose={() => setLinkFallback(null)}
+          ariaLabel="העתקת קישור"
+          modalClass="popup-modal curl-modal"
+        >
+          <div className="popup-head">
+            <h3>העתק את הקישור</h3>
+            <button className="chat-close" onClick={() => setLinkFallback(null)} aria-label="סגור">
+              <Icon name="close" />
+            </button>
+          </div>
+          <p className="hint" style={{ marginTop: 0 }}>
+            העתקה אוטומטית אינה זמינה בדפדפן זה. סמן את הקישור והעתק ידנית:
+          </p>
+          <input
+            className="sup-filter"
+            type="text"
+            readOnly
+            value={linkFallback}
+            dir="ltr"
+            onFocus={(e) => e.currentTarget.select()}
+            autoFocus
+          />
+          <div className="chat-report-actions">
+            <button className="btn btn-ghost btn-sm" onClick={() => setLinkFallback(null)}>
+              סגור
+            </button>
+          </div>
+        </Dialog>
+      )}
     </>
   );
 }

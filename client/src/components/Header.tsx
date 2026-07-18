@@ -7,7 +7,9 @@ export function Header() {
     <header className="header">
       <div className="header-bar">
         <div className="brand">
-          <span className="brand-badge">◈</span>
+          <span className="brand-badge" aria-hidden="true">
+            <Icon name="logo" />
+          </span>
           <span>מערכת שיקום</span>
         </div>
         <nav className="nav" aria-label="ניווט ראשי">

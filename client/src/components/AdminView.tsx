@@ -3,6 +3,9 @@ import { api, ApiError } from '../api/client';
 import type { ConfigMapRow, SynonymRow, SyncPlan, SyncRun, UnansweredRow } from '../api/types';
 import { useApp } from '../state/AppContext';
 import { Breadcrumbs } from './Header';
+import { ErrorState } from './ErrorState';
+import { useConfirm } from './ConfirmDialog';
+import { Icon } from './icons';
 
 const KINDS: [string, string][] = [
   ['items', 'מק"טים'],
@@ -22,11 +25,14 @@ export function AdminView() {
   const [synonyms, setSynonyms] = useState<SynonymRow[]>([]);
   const [unanswered, setUnanswered] = useState<UnansweredRow[]>([]);
   const [prefillTerm, setPrefillTerm] = useState('');
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const { confirm, element: confirmEl } = useConfirm();
 
   const hasToken = adminToken.trim().length > 0;
 
   async function refresh() {
     if (!hasToken) return;
+    setRefreshError(null);
     try {
       const [r, c, syn, un] = await Promise.all([
         api.syncRuns(adminToken),
@@ -39,8 +45,11 @@ export function AdminView() {
       setSynonyms(syn.items);
       setUnanswered(un.items);
     } catch (e) {
+      const msg = e instanceof ApiError ? e.message : 'שגיאה בטעינת נתוני הניהול';
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-        showToast(e.message, 'error');
+        showToast(msg, 'error');
+      } else {
+        setRefreshError(msg);
       }
     }
   }
@@ -56,6 +65,13 @@ export function AdminView() {
   }
 
   async function deleteSynonym(id: number) {
+    const ok = await confirm({
+      title: 'מחיקת מילה נרדפת',
+      message: 'למחוק את המיפוי? הפעולה תשפיע מיד על החיפוש החכם והעוזר.',
+      confirmLabel: 'מחק',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.synonymDelete(id, adminToken);
       refresh();
@@ -83,7 +99,12 @@ export function AdminView() {
 
   async function apply() {
     if (!file) return;
-    if (!confirm('להחיל את השינויים על בסיס הנתונים?')) return;
+    const ok = await confirm({
+      title: 'החלת שינויים',
+      message: 'להחיל את השינויים על בסיס הנתונים? פעולה זו מעדכנת את המאגר.',
+      confirmLabel: 'החל שינויים',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const r = await api.syncApply(kind, file, adminToken);
@@ -132,6 +153,11 @@ export function AdminView() {
             <button className="btn btn-ghost" onClick={refresh}>רענן</button>
           </div>
           {!hasToken && <p className="hint">נדרש אסימון כדי לבצע פעולות ניהול.</p>}
+          {refreshError && (
+            <div style={{ marginTop: 12 }}>
+              <ErrorState message={refreshError} onRetry={refresh} />
+            </div>
+          )}
         </section>
 
         {hasToken && (
@@ -179,7 +205,9 @@ export function AdminView() {
                 }}
               >
                 {file ? (
-                  <b>📄 {file.name}</b>
+                  <b>
+                    <Icon name="file" /> {file.name}
+                  </b>
                 ) : (
                   <>גרור לכאן קובץ XLSX / CSV או לחץ לבחירה</>
                 )}
@@ -281,6 +309,7 @@ export function AdminView() {
           </>
         )}
       </main>
+      {confirmEl}
     </>
   );
 }

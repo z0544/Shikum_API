@@ -21,7 +21,7 @@ type Intent = 'search' | 'suppliers' | 'contact';
 const REPORT_EMAIL = import.meta.env.VITE_REPORT_EMAIL || 'yehudakri@gmail.com';
 
 const GREETING =
-  'שלום! 👋 אני העוזר החכם של מערכת השיקום. ספרו לי מה הבעיה או הצורך ואשאל שאלות כדי להבין במה לעזור.\nאם יש לכם מסמך הפניה — אפשר לצרף אותו (📎) ואזהה ממנו איזה שירות דרוש.';
+  'שלום! אני העוזר החכם של מערכת השיקום. ספרו לי מה הבעיה או הצורך ואשאל שאלות כדי להבין במה לעזור.\nאם יש לכם מסמך הפניה — אפשר לצרף אותו (בלחצן המהדק) ואזהה ממנו איזה שירות דרוש.';
 
 const START_QUICK = ['כיסא גלגלים', 'טיפול פסיכולוגי', 'מכשיר שמיעה', 'עדשות מולטיפוקל'];
 
@@ -197,7 +197,7 @@ export function ChatBot() {
     setSuggests([]);
     setQuick([]);
     setPendingIntent('search');
-    pushUser(`📎 ${file.name}`);
+    pushUser(`צורף מסמך: ${file.name}`);
     setLoading(true);
     try {
       const res = await api.chatDocument(file, ctx);
@@ -335,7 +335,9 @@ export function ChatBot() {
       {open && (
         <div className="chat-panel" role="dialog" aria-label="עוזר חכם">
           <div className="chat-head">
-            <span className="chat-avatar">◈</span>
+            <span className="chat-avatar" aria-hidden="true">
+              <Icon name="logo" />
+            </span>
             <div>
               <h3>עוזר חכם</h3>
               <span className="chat-sub">

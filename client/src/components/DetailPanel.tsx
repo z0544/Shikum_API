@@ -5,6 +5,7 @@ import { useApp } from '../state/AppContext';
 import { SuppliersPanel } from './SuppliersPanel';
 import { Icon } from './icons';
 import { Dialog } from './Dialog';
+import { ErrorState } from './ErrorState';
 
 const FIELD_LABELS: [keyof ItemDetail, string][] = [
   ['catalogNumber', 'מק"ט'],
@@ -29,16 +30,20 @@ export function DetailPanel({
   const { showToast } = useApp();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [showApi, setShowApi] = useState(false);
 
   useEffect(() => {
     if (!entityId) {
       setItem(null);
+      setError(null);
       return;
     }
     let alive = true;
     setLoading(true);
+    setError(null);
     setShowHistory(false);
     api
       .getItem(entityId)
@@ -48,13 +53,17 @@ export function DetailPanel({
         onLoaded?.(d);
       })
       .catch((e) => {
-        if (alive) showToast(e instanceof ApiError ? e.message : 'שגיאה בטעינת הפריט', 'error');
+        if (alive) {
+          setItem(null);
+          setError(e instanceof ApiError ? e.message : 'שגיאה בטעינת הפריט');
+        }
       })
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [entityId, showToast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityId, reloadKey]);
 
   if (!entityId) {
     return (
@@ -72,6 +81,12 @@ export function DetailPanel({
             <span className="sk sk-line" key={i} />
           ))}
         </div>
+      </div>
+    );
+  if (error)
+    return (
+      <div className="card">
+        <ErrorState message={`לא ניתן לטעון את הוריאנט — ${error}`} onRetry={() => setReloadKey((k) => k + 1)} />
       </div>
     );
   if (!item) return null;
